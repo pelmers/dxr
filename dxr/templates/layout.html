@@ -1,133 +1,109 @@
 <!DOCTYPE html>
 <html lang="en-US">
   <head>
-    <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
-    <link href="{{ wwwroot }}/static/layout.css" rel="stylesheet" type="text/css">
-    <link href="{{ wwwroot }}/static/code-style.css" rel="stylesheet" type="text/css">
-    <link href="{{ wwwroot }}/static/tango-search.png" rel="shortcut icon">
-    <script>
-      var wwwroot = "{{ wwwroot }}";
-    </script>
-    <script src="{{ wwwroot }}/static/dxr.js"></script>
-    <script src="{{ wwwroot }}/static/menu.js"></script>
-    <script src="{{ wwwroot }}/static/search.js"></script>
-    <script>
-    // State used for fetching results
-    var state = {
-      // Current query (loaded from q in initIncrementalSearch)
-      // This, avoid ugly decoding, otherwise needed
-      query:        null,
-      // Offset for next request
-      offset:       {{state_offset or 0}},
-      // Number of results when paging
-      limit:        {{state_limit or 100}},
-      // True, if there's no more result
-      eof:          {% if state_eof -%}
-                      true
-                    {%-else-%}
-                      false
-                    {%-endif %},
-      // True, when this state is modified by user through a search control
-      changed:      false,
-      isCaseSensitive: false
-    };
-  </script>
+    <meta charset="utf-8" />
     {% block head %}
+      <link href="{{ wwwroot }}/static/tango-search.png" rel="shortcut icon">
     {% endblock %}
     <title>{% block title %}DXR Code Index{% endblock %}</title>
+
+    {% block site_css %}
+      <link href="{{ wwwroot }}/static/css/dxr.css" rel="stylesheet" type="text/css" media="screen" />
+      <link href="{{ wwwroot }}/static/css/code-style.css" rel="stylesheet" type="text/css" media="screen" />
+      <link href="{{ wwwroot }}/static/css/selector-common.css" rel="stylesheet" type="text/css" media="screen" />
+      <link href="{{ wwwroot }}/static/css/filter.css" rel="stylesheet" type="text/css" media="screen" />
+    {% endblock %}
   </head>
-  <body>
+  <body {% block body_class %}{% endblock %}>
     {% block body %}
 
-    <div id="search-box" class="{% block search_box_class %}with-results{% endblock %}">
-      <img src="{{ wwwroot }}/static/magmoz.svg" id="big-logo">
-      <div id="search-background">
-        <a id="dxr" href="{{ wwwroot }}/"><img src="{{ wwwroot }}/static/magmoz.svg" id="small-logo"></a>
-        <form method="get" action="{{ wwwroot }}/{{ tree }}/search" id="width-limiter">
-          {% set showing_tree_menu = trees|length > 1 %}
-          <div class="hidden-with-results">
-            You can search
+    <div id="search-box" class="{% block search_box_class %}with-results{% endblock %} search-box">
+      <form method="get" action="{{ wwwroot }}/{{ tree }}/search" {% block search_type_id %}id="basic_search"{% endblock %} data-error="An error occured during the processing of your query. Please reload the page and try again.">
+        <fieldset class="text_search">
+          {% block legend %}{% endblock %}
 
-            {% if showing_tree_menu %}
-              <select name="tree" id="tree">
-                {% for t in trees %}
-                  <option{% if ((t == tree) if tree else loop.first)  %} selected="selected"{% endif %}>{{ t }}</option>
-                {% endfor %}
-              </select>
-            {% else %}
-              <b>{{ tree }}</b>
-              <input type="hidden" name="tree" value="{{ tree }}" id="tree">
-            {% endif %}
-            here
-          </div>
-          <div class="shown-with-results">
-            <div id="tree-tip">
-              <div class="file-name">
-                {%- for path, name in paths_and_names -%}
-                  <span class="slash">/</span><a href="{{ wwwroot }}{{ path }}">{{ name }}</a>
-                {%- endfor -%}
-              </div>
-            </div>
-            <div id="tip">
-              {%- block tip -%}
-              <label for="query">Enter search query here</label>
-              {%- endblock -%}
-            </div>
-          </div>
+          {% block text_search %}
+            <label for="query" class="query_label visually-hidden">Find</label>
+            <input type="text" name="q" value="{{ query }}" maxlength="2048" id="query" class="query" accesskey="s" title="Search" placeholder="Enter query to start search..." />
+            <label class="checkbox_label"><input type="checkbox" name="case" id="case" class="checkbox_case" value="true"{% if is_case_sensitive %} checked{% endif %} />Case-sensitive</label>
+          {% endblock %}
+        </fieldset>
 
-          <input type="text" name="q" value="{{ query }}" maxlength="2048" id="query" accesskey="s" title="Search" autocomplete="off" autofocus>
-          <label id="case-label"><input type="checkbox" name="case" id="case" value="true"{% if is_case_sensitive %} checked{% endif %}>Case-sensitive</label>
-          <input type="hidden" name="redirect" value="true" id="redirect">
-
-          <div class="hidden-with-results">
-            or browse
-            {% for t in trees -%}
-              {%- if loop.last and trees|length > 1 %}
-                or
-              {% elif not loop.first and trees|length > 1 -%}
-                ,
-              {% endif -%}
-              <a href="{{ t }}/source/">{{ t }}</a>
-            {%- endfor -%}
-            .
-          </div>
-        </form>
-      </div>
-    </div>
-
-    {% if panel %}
-    <div id="panel">
-      <a id="panel-toggle">
-        {%- block panel_title -%}
-        Navigation
-        {%- endblock -%}
-      </a>
-      <div id="panel-content">
-        {% block panel %}
+        {% block advanced_search %}
         {% endblock %}
-      </div>
+
+          <input type="hidden" value="{{ tree }}" id="ts-value" />
+          <input type="hidden" name="redirect" value="true" id="redirect" />
+
+        {% block search_button %}
+          <input type="submit" value="Search" class="visually-hidden" />
+        {% endblock %}
+      </form>
+      {% include '/partial/filter.html' %}
     </div>
-    {% endif %}
-    <div id="content">
-      {% block content %}
+
+    {% block content %}
+      <div id="content" class="content" data-no-results="No results returned for current query."></div>
+
+      {% block tree_selector %}
+        {% set showing_tree_menu = trees|length > 1 %}
+        {% if showing_tree_menu %}
+          <section id="tree-selector" class="tree-selector">
+            <button type="button" class="ts-select-trigger" aria-label="Switch Tree">
+                <!-- arrow icon using icon font -->
+                <span aria-hidden="true" data-icon-arrow="&#xe801;" class="selector-arrow">
+                    <!-- tree icon using icon font -->
+                    <span aria-hidden="true" data-icon="&#xe800;"></span>
+                    <span class='current-tree'>Switch Tree</span>
+                </span>
+            </button>
+            <div class="select-options ts-modal" aria-expanded="false">
+                <form name="options-filter" class="options-filter" data-active="false">
+                    <label for="filter-txt" class="visually-hidden">Filter Trees</label>
+                    <input type="text" name="filter-txt" id="filter-txt" placeholder="Filter trees" />
+                    <input type="submit" value="Filter" class="visually-hidden" />
+                </form>
+                {% block tree_selector_options %}
+                  <ul class="selector-options" tabindex="-1">
+                  {% for t in trees %}
+                      <li>
+                        <a href="{{ wwwroot }}/{{ t }}/parallel/" {% if t == tree %}class="selected" aria-checked="true"{% endif %}><span class="selector-option-label">{{ t }}</span>: The ships hung in the sky in much the same way that bricks don't.</a>
+                      </li>
+                  {% endfor %}
+                  </ul>
+                {% endblock %}
+            </div>
+          </section>
+        {% endif %}
       {% endblock %}
-    </div>
-    <div id="foot">
-      {% block foot %}
-      This page was generated by DXR 
-      <span class="pretty-date" data-datetime="{{ generated_date }}">
-        {{ generated_date }}
-      </span>.<br>
+    {% endblock %}
+
+    {% block footer %}
+    <div id="foot" class="footer">
+      This page was generated by DXR
+      <span class="pretty-date" data-datetime="{{ generated_date }}"></span>.<br>
       {{config.foot_text}}
       {% endblock %}
     </div>
     {% endblock %}
-    <div id="fetch-results">
-      <img src="{{ wwwroot }}/static/view-refresh.svg"
-           style="vertical-align: middle;">
-      Fetching results
-    </div>
+
     <div id="inline-menu"></div>
     <div id="info-box"></div>
+
+    {% set eof = True if state_eof else False %}
+
+    {% block js_data %}
+      <!-- avoid inline JS and use data attributes instead. Hackey but hey... -->
+      <span id="data" data-root="{{ wwwroot }}" data-search="{{ wwwroot }}/{{ tree }}/search" data-tree="{{ tree }}"></span>
+      <span id="state" data-offset="{{state_offset or 0}}" data-limit="{{state_limit or 100}}" data-eof="{{ eof }}"></span>
+    {% endblock %}
+
+    {% block site_js %}
+      <script src="{{ wwwroot }}/static/js/jquery203.js"></script>
+      <script src="{{ wwwroot }}/static/js/nunjucks-min.js"></script>
+      <script src="{{ wwwroot }}/static/js/templates.js"></script>
+      <script src="{{ wwwroot }}/static/js/dxr.js"></script>
+      <script src="{{ wwwroot }}/static/js/filter.js"></script>
+    {% endblock %}
   </body>
 </html>

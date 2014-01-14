@@ -114,20 +114,10 @@ def build_instance(config_path, nb_jobs=None, tree=None, verbose=False):
     # Create jinja cache folder in target folder
     ensure_folder(os.path.join(config.target_folder, 'jinja_dxr_cache'))
 
-    # Build root-level index.html:
-    ensure_folder(os.path.join(config.target_folder, 'trees'))
-    _fill_and_write_template(
-        jinja_env,
-        'index.html',
-        os.path.join(config.target_folder, 'trees', 'index.html'),
-        {'wwwroot': config.wwwroot,
-          'tree': config.trees[0].name,
-          'trees': [t.name for t in config.trees],
-          'config': config.template_parameters,
-          'generated_date': config.generated_date})
     # TODO Make open-search.xml things (or make the server so it can do them!)
 
     # Build trees requested
+    ensure_folder(os.path.join(config.target_folder, 'trees'))
     for tree in trees:
         # Note starting time
         start_time = datetime.now()
@@ -537,7 +527,6 @@ def htmlify(tree, conn, icon, path, text, dst_path, plugins):
     # Load template
     env = load_template_env(tree.config.temp_folder,
                             tree.config.template_folder)
-    tmpl = env.get_template('file.html')
 
     arguments = {
         # Set common template variables
@@ -563,8 +552,7 @@ def htmlify(tree, conn, icon, path, text, dst_path, plugins):
         'sections': build_sections(tree, conn, path, text, htmlifiers)
     }
 
-    # Fill-in variables and dump to file with utf-8 encoding
-    tmpl.stream(**arguments).dump(dst_path, encoding='utf-8')
+    _fill_and_write_template(env, 'file.html', dst_path, arguments)
 
 
 class Line(object):

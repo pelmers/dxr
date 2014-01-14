@@ -4,52 +4,120 @@
 
 {% block head %}
   <link rel="shortcut icon" href="{{ wwwroot }}/static/icons/{{ icon }}.png"/>
-  <script src="{{ wwwroot }}/static/menu.js"></script>
-  <script src="{{ wwwroot }}/static/file.js"></script>
-  <script src="{{ wwwroot }}/static/panel.js"></script>
 {% endblock %}
 
-{% set panel = True %}
-{% set state_eof = True %}
-
-{% block panel %}
-  {% for section, items in sections %}
-  <div class="section">
-    <h1>{{ section }}</h1>
-    {% for icon, title, href in items %}
-      <a href="{{ href }}"
-        title="{{ title }}"
-        style="background-image: url('{{ wwwroot }}/static/icons/{{ icon }}.png');"
-        >{{ title }}</a>
-    {%- endfor %}
-    </div>
-  {% endfor %}
+{% block site_css %}
+  {{ super() }}
+  <link href="{{ wwwroot }}/static/css/tree-selector.css" rel="stylesheet" type="text/css" media="screen" />
 {% endblock %}
 
 {% block content %}
-<div id="annotations">
-  {% for line, annotations in lines %}
-    <div class="annotation-set" id="aset-{{ loop.index }}">
-      {%- for annotation in annotations -%}
-        <div {% for key, value in annotation.items() %}
-              {{ key }}="{{ value }}"
-             {% endfor %} ></div>
-      {%- endfor -%}
+<div id="content" class="content" data-no-results="No results returned for current query.">
+  <div class="file-name">
+    {%- for path, name in paths_and_names -%}
+      {% if not loop.first or loop.last %}
+        <span class="path-separator">/</span><a href="{{ wwwroot }}{{ path }}">{{ name }}</a>
+      {% else %}
+        <a href="{{ wwwroot }}{{ path }}">{{ name }}</a>
+      {% endif %}
+    {%- endfor -%}
+  </div>
+
+{% set showing_tree_menu = trees|length > 1 %}
+  {% if showing_tree_menu %}
+    <section id="tree-selector" class="tree-selector">
+      <button type="button" class="ts-select-trigger" aria-label="Switch Tree">
+          <!-- arrow icon using icon font -->
+          <span aria-hidden="true" data-icon-arrow="&#xe801;" class="selector-arrow">
+              <!-- tree icon using icon font -->
+              <span aria-hidden="true" data-icon="&#xe800;"></span>
+              <span class='current-tree'>Switch Tree</span>
+          </span>
+      </button>
+      <div class="select-options ts-modal" aria-expanded="false">
+          <form name="options-filter" class="options-filter" data-active="false">
+              <label for="filter-txt" class="visually-hidden">Filter Trees</label>
+              <input type="text" name="filter-txt" id="filter-txt" placeholder="Filter trees" />
+              <input type="submit" value="Filter" class="visually-hidden" />
+          </form>
+          {% block tree_selector_options %}
+            <ul class="selector-options" tabindex="-1">
+            {% for t in trees %}
+                <li>
+                  <a href="{{ wwwroot }}/{{ t }}/parallel/{{ path }}" {% if t == tree %}class="selected" aria-checked="true"{% endif %}><span class="selector-option-label">{{ t }}</span>: The ships hung in the sky in much the same way that bricks don't.</a>
+                </li>
+            {% endfor %}
+            </ul>
+          {% endblock %}
+      </div>
+    </section>
+  {% endif %}
+
+  {% set panel = True %}
+  {% set state_eof = True %}
+
+  {% if panel %}
+    <div class="panel">
+      <button id="panel-toggle">
+        <span class="navpanel-icon" aria-hidden="true"></span>
+        {%- block panel_title -%}
+        Navigation
+        {%- endblock -%}
+      </button>
+      {% for section, items in sections %}
+        <section id="panel-content" aria-expanded="false" aria-hidden="true">
+          <h4>{{ section }}</h4>
+          <ul>
+          {% for icon, title, href in items %}
+            <li>
+              <a href="{{ href }}"title="{{ title }}" class="{{ icon }}">{{ title }}</a>
+            </li>
+          {%- endfor %}
+          </ul>
+        </section>
+      {% endfor %}
     </div>
-  {%- endfor -%}
-</div>
-<div class="line-numbers">
-  {% for line, annotations in lines %}
-    <pre><a href="#{{ loop.index }}"
-            class="ln" id="line-{{ loop.index }}"
-            name="{{ loop.index }}">{{ loop.index }}</a></pre>
-  {%- endfor %}
-</div>
-<div class="file-lines">
+  {% endif %}
+
+  <div id="annotations">
+    {% for line, annotations in lines %}
+      <div class="annotation-set" id="aset-{{ loop.index }}">
+        {%- for annotation in annotations -%}
+          <div {% for key, value in annotation.items() %}
+                {{ key }}="{{ value }}"
+               {% endfor %} ></div>
+        {%- endfor -%}
+      </div>
+    {%- endfor -%}
+  </div>
+
+  <table id="file" class="result_snippet file">
+    <thead class="visually-hidden">
+        <th scope="col">Line</th>
+        <th scope="col">Code</th>
+    </thead>
+    <tbody>
+    {% for line, annotations in lines %}
+      <tr id="{{ loop.index }}">
+          <td>
+            <a href="#{{ loop.index }}">{{ loop.index }}</a>
+          </td>
+          <td class="code">
 <pre>
-{%- for line, annotations in lines %}
-<code aria-labelledby="line-{{ loop.index }}">{{ line }}</code>
-{%- endfor -%}
+<code aria-labelledby="{{ loop.index }}">{{ line }}</code>
 </pre>
-</div>
+          </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+ </div>
+{% endblock %}
+
+{% block site_js %}
+  {{ super() }}
+  <script src="{{ wwwroot }}/static/js/utils.js"></script>
+  <script src="{{ wwwroot }}/static/js/context_menu.js"></script>
+  <script src="{{ wwwroot }}/static/js/panel.js"></script>
+  <script src="{{ wwwroot }}/static/js/tree-selector.js"></script>
 {% endblock %}
