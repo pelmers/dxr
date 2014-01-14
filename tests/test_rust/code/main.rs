@@ -69,12 +69,19 @@ enum SomeOtherEnum {
     SomeConst3
 }
 
-fn matchSomeEnum(val : SomeEnum) {
+fn matchSomeEnum(val: SomeEnum) {
     match val {
         Ints(int1, int2) => { println((int1+int2).to_str()); }
         Floats(float1, float2) => { println((float2*float1).to_str()); }
         Strings(_, _, s3) => { println(s3); }
         MyTypes(mt1, mt2) => { println((mt1.field1 - mt2.field1).to_str()); }
+    }
+}
+
+fn matchSomeOtherEnum(val: SomeOtherEnum) {
+    match val {
+        SomeConst1 => { println("I'm const1."); }
+        SomeConst2 | SomeConst3 => { println("I'm const2 or const3."); }
     }
 }
 
@@ -110,4 +117,6 @@ fn main() {
     let s7: SomeEnum = Strings(~"one",~"two",~"three");
     matchSomeEnum(s6);
     matchSomeEnum(s7);
+    let s8: SomeOtherEnum = SomeConst2;
+    matchSomeOtherEnum(s8);
 }
