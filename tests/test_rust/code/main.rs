@@ -56,6 +56,28 @@ impl some_fields {
 
 type MyType = ~some_fields;
 
+enum SomeEnum {
+    Ints(int, int),
+    Floats(f64, f64),
+    Strings(~str, ~str, ~str),
+    MyTypes(MyType, MyType)
+}
+
+enum SomeOtherEnum {
+    SomeConst1,
+    SomeConst2,
+    SomeConst3
+}
+
+fn matchSomeEnum(val : SomeEnum) {
+    match val {
+        Ints(int1, int2) => { println((int1+int2).to_str()); }
+        Floats(float1, float2) => { println((float2*float1).to_str()); }
+        Strings(_, _, s3) => { println(s3); }
+        MyTypes(mt1, mt2) => { println((mt1.field1 - mt2.field1).to_str()); }
+    }
+}
+
 fn hello((z, a) : (u32, ~str)) {
     println(yy.to_str());
     let (x, y): (u32, u32) = (5, 3);
@@ -84,4 +106,8 @@ fn main() {
     let s4: msalias::nested_struct = sub2::nested_struct{ field2: 55};
     println(s2.field1.to_str());
     let s5: MyType = ~some_fields{ field1: 55};
+    let s6: SomeEnum = MyTypes(~s2, s5);
+    let s7: SomeEnum = Strings(~"one",~"two",~"three");
+    matchSomeEnum(s6);
+    matchSomeEnum(s7);
 }
