@@ -112,12 +112,14 @@ def post_process(tree, conn):
     print " - Adding tables"
     conn.executescript(schema.get_create_sql())
 
-    print " - Processing files"
     temp_folder = os.path.join(tree.temp_folder, 'plugins', PLUGIN_NAME)
+    #process_csv('/home/vagrant/dxr/tests/test_rust/code/main.csv','main',conn)
     for root, dirs, files in os.walk(temp_folder):
-        for f in [f for f in files if f.endswith('.csv')]:
-            crate_name = root[:f.index('.csv')]
-            process_csv(os.path.join(root, f), crate_name, conn)
+        for f in files:
+            if f.endswith('.csv'):
+                print " - Processing %s" % f
+                crate_name = root[:f.index('.csv')]
+                process_csv(os.path.join(root, f), crate_name, conn)
 
         # don't need to look in sub-directories
         break

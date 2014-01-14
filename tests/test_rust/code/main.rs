@@ -23,9 +23,6 @@ mod sub {
 
 }
 
-pub mod SameDir;
-pub mod SubDir;
-
 struct nofields;
 struct some_fields {
     field1: u32,
@@ -87,7 +84,4 @@ fn main() {
     let s4: msalias::nested_struct = sub2::nested_struct{ field2: 55};
     println(s2.field1.to_str());
     let s5: MyType = ~some_fields{ field1: 55};
-
-    let s = SameDir::SameStruct{name:~"Bob"};
-    let s = SubDir::SubStruct{name:~"Bob"};
 }
