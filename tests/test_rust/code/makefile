@@ -1,6 +1,6 @@
 all: code
 code: main.rs
-	#$(RUST) $< -o $@ --save-analysis
+	$(RUST) $< -o $@
 clean:
 	rm -rf code
 

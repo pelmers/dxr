@@ -6,7 +6,7 @@ from dxr.languages import language_schema
 __all__ = dxr.plugins.indexer_exports()
 
 PLUGIN_NAME = 'rust'
-PATH_TO_RUSTC = "/home/ncameron/rust/x86_64-unknown-linux-gnu/stage1/bin/rustc"
+PATH_TO_RUSTC = os.getenv("RUSTC_DXR")
 RUST_DXR_FLAG = " --save-analysis"
 
 def pre_process(tree, env):
