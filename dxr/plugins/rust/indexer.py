@@ -1,12 +1,17 @@
 import dxr.plugins
 import csv
 import os
+import os.path
+import sys
 from dxr.languages import language_schema
 
 __all__ = dxr.plugins.indexer_exports()
 
 PLUGIN_NAME = 'rust'
-PATH_TO_RUSTC = "/home/ncameron/rust/x86_64-unknown-linux-gnu/stage1/bin/rustc"
+PATH_TO_RUSTC = os.getenv("RUSTC_DXR")
+if not PATH_TO_RUSTC or not os.path.isfile(PATH_TO_RUSTC):
+    print >>sys.stderr, "RUSTC_DXR must be set to the full path of rustc."
+    sys.exit(1)
 RUST_DXR_FLAG = " --save-analysis"
 
 def pre_process(tree, env):
