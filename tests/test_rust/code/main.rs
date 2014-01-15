@@ -19,8 +19,12 @@ mod sub {
         pub struct nested_struct {
             field2: u32,
         }
-    }
 
+        pub enum nested_enum {
+            Nest2 = 2,
+            Nest3 = 3
+        }
+    }
 }
 
 struct nofields;
