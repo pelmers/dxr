@@ -118,7 +118,6 @@ def post_process(tree, conn):
     conn.executescript(schema.get_create_sql())
 
     temp_folder = os.path.join(tree.temp_folder, 'plugins', PLUGIN_NAME)
-    #process_csv('/home/vagrant/dxr/tests/test_rust/code/main.csv','main',conn)
     for root, dirs, files in os.walk(temp_folder):
         for f in files:
             if f.endswith('.csv'):
@@ -182,7 +181,10 @@ def process_csv(file_name, crate_name, conn):
             for i in range(1, len(line), 2):
                 args[line[i]] = line[i + 1]
 
-            globals()['process_' + line[0]](args, conn)
+            try:
+                globals()['process_' + line[0]](args, conn)
+            except KeyError:
+                print " - process_"+line[0]+" not implemented!"
 
             limit += 1
             if limit > 10000:
@@ -218,6 +220,17 @@ def process_function(args, conn):
     args['file_id'] = get_file_id(args['file_name'], conn)
 
     execute_sql(conn, language_schema.get_insert_sql('functions', args))
+
+def process_enum(args, conn):
+    args['language'] = 'rust'
+    args['kind'] = 'enum'
+    args['file_id'] = get_file_id(args['file_name'], conn)
+    args['value'] = args['qualname'].split('::')[-1]
+    args['refid'] = args['id']
+    execute_sql(conn, language_schema.get_insert_sql('types', args))
+
+def process_variant(args, conn):
+    process_type_ref(args, conn)
 
 def process_fn_call(args, conn):
     args['file_id'] = get_file_id(args['file_name'], conn)
