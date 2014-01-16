@@ -32,7 +32,6 @@ mod sub {
 }
 
 struct nofields;
-#[deriving(Clone)]
 struct some_fields {
     field1: u32,
 }
@@ -134,12 +133,12 @@ fn main() {
     let s4: msalias::nested_struct = sub2::nested_struct{ field2: 55};
     println(s2.field1.to_str());
     let s5: MyType = ~some_fields{ field1: 55};
-    let s6: SomeEnum = MyTypes(~s2, s5.clone());
+    let s6: SomeEnum = MyTypes(~s2, s5);
     let s7: SomeEnum = Strings(~"one",~"two",~"three");
     matchSomeEnum(s6);
     matchSomeEnum(s7);
     let s8: SomeOtherEnum = SomeConst2;
     matchSomeOtherEnum(s8);
-    let s9: SomeStructEnum = EnumStruct2{f1: s5.clone(), f2: ~s2};
+    let s9: SomeStructEnum = EnumStruct2{f1: ~some_fields{field1:10}, f2: ~s2};
     matchSomeStructEnum(s9);
 }
