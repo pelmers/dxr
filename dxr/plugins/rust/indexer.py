@@ -225,12 +225,11 @@ def process_enum(args, conn):
     args['language'] = 'rust'
     args['kind'] = 'enum'
     args['file_id'] = get_file_id(args['file_name'], conn)
-    args['value'] = args['qualname'].split('::')[-1]
-    args['refid'] = args['id']
+    args['name'] = args['qualname'].split('::')[-1]
     execute_sql(conn, language_schema.get_insert_sql('types', args))
 
 def process_variant(args, conn):
-    process_type_ref(args, conn)
+    process_variable(args, conn)
 
 def process_fn_call(args, conn):
     args['file_id'] = get_file_id(args['file_name'], conn)
