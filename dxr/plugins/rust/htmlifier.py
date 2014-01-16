@@ -242,8 +242,6 @@ class RustHtmlifier(object):
             member = 'fields'
         elif kind == 'trait':
             member = 'methods'
-        elif kind == 'enum':
-            member = 'variants'
 
         if member:
             menu.append({
