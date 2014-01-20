@@ -171,7 +171,7 @@ def get_file_id(file_name, conn):
 def process_csv(file_name, crate_name, conn):
     try:
         f = open(file_name, 'rb')
-        parsed_iter = csv.reader(f)
+        parsed_iter = csv.reader(f, delimiter=';')
         # the first item on a line is the kind of entity we are dealing with and so
         # we can use that to dispatch to the appropriate process_... function
         limit = 0
@@ -239,7 +239,6 @@ def process_fn_call(args, conn):
 def process_variable(args, conn):
     args['language'] = 'rust'
     args['type'] = ''
-    args['value'] = '' # XXX for const items etc., we can show the value as a tooltip
     args['file_id'] = get_file_id(args['file_name'], conn)
 
     execute_sql(conn, language_schema.get_insert_sql('variables', args))
