@@ -129,7 +129,7 @@ enum SomeStructEnum {
 
 fn matchSomeEnum(val: SomeEnum) {
     match val {
-        Ints(int1, int2) => { println((int1+int2).to_str()); }
+        Ints(int1, int2) => { hello((1u32,~"a")); println((int1+int2).to_str()); }
         Floats(float1, float2) => { println((float2*float1).to_str()); }
         Strings(_, _, s3) => { println(s3); }
         MyTypes(mt1, mt2) => { println((mt1.field1 - mt2.field1).to_str()); }
