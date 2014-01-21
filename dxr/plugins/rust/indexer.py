@@ -171,7 +171,7 @@ def get_file_id(file_name, conn):
 def process_csv(file_name, crate_name, conn):
     try:
         f = open(file_name, 'rb')
-        parsed_iter = csv.reader(f, delimiter=';')
+        parsed_iter = csv.reader(f)
         # the first item on a line is the kind of entity we are dealing with and so
         # we can use that to dispatch to the appropriate process_... function
         limit = 0
