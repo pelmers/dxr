@@ -231,6 +231,9 @@ def process_enum(args, conn):
 def process_variant(args, conn):
     process_variable(args, conn)
 
+def process_variant_struct(args, conn):
+    process_struct(args, conn, 'variant_struct')
+
 def process_fn_call(args, conn):
     args['file_id'] = get_file_id(args['file_name'], conn)
 
@@ -248,14 +251,14 @@ def process_var_ref(args, conn):
 
     execute_sql(conn, schema.get_insert_sql('variable_refs', args))
 
-def process_struct(args, conn):
+def process_struct(args, conn, kind = 'struct'):
     # Used for fixing up the refid in fixup_struct_ids
     if args['ctor_id'] != '0':
         ctor_ids[args['ctor_id']] = args['id']
 
     args['name'] = args['qualname'].split('::')[-1]
     args['file_id'] = get_file_id(args['file_name'], conn)
-    args['kind'] = 'struct'
+    args['kind'] = kind
     args['language'] = 'rust'
 
     execute_sql(conn, language_schema.get_insert_sql('types', args))
