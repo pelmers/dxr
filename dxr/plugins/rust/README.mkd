@@ -15,31 +15,15 @@ hack the compiler to output dxr csvs and make it more generic later...
 TODO
 ----
 
-File a bunch of bugzilla bugs
+REBASE
 
 scopes so we can query items in a module, class etc.
 
-multiple files and paths in one crate
-
-multiple crates
-
-sort out the lhs bar
+sort out the rhs bar
 
 rename dxr -> dump ...
 
-jump to stdlib index somewhere for stdlib etc. refs. (maybe this will come out in the wash; doubt it)
-  jump to docs or source, maybe
-handle calls into C via the FFI using the clang plugin (and vice versa, I guess)
-effects of functions (purity etc.)
-  other static analysis type info from the compiler
-
-how to handle macros - are we checking the ast before or after expansion?
-  - I think after, and this is kinda busted sometimes
-
-refactor to share python code with the clang plugin?
-
-Need to add a layer of indirection for ast ids -> db ids (in the dxr (and clang) plugin) so we
-don't clash with rows from the clang plugin (or make the language part of the id or something)
+methods - check static method with specialisation check extern mod github link
 
 compiler warnings
 
@@ -68,5 +52,11 @@ lifetime param defs + refs
 non-mut vars (locals, statics) should get a value tooltip
 ...
 
+pelmers
+-------
+
+enums (jump to def, find uses of each, find all uses)
+  variant refs should get values on hover
+match (adds var decls)
 
 

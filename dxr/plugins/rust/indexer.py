@@ -55,6 +55,7 @@ schema = dxr.schema.Schema({
         ("refid", "INTEGER", False),      # ID of the module being aliased
         ("name", "VARCHAR(256)", False),
         ("qualname", "VARCHAR(256)", False),
+        ("location", "VARCHAR(256)", True), # only used for extern mod
         ("extent_start", "INTEGER", True),
         ("extent_end", "INTEGER", True),
         ("_location", True),
@@ -64,13 +65,15 @@ schema = dxr.schema.Schema({
     ],
     # References to functions
     "function_refs": [
-        ("refid", "INTEGER", True),      # ID of the function being referenced
+        ("refid", "INTEGER", True),      # ID of the function defintion, if it exists
+        ("declid", "INTEGER", True),     # ID of the funtion declaration, if it exists
+        ("scopeid", "INTEGER", True),    # ID of the scope in which the call occurs
         ("extent_start", "INTEGER", True),
         ("extent_end", "INTEGER", True),
         ("_location", True),
         ("_location", True, 'referenced'),
         ("_fkey", "refid", "functions", "id"),
-        ("_index", "refid"),
+        ("_fkey", "declid", "functions", "id"),
     ],
     # References to variables
     "variable_refs": [
@@ -87,6 +90,7 @@ schema = dxr.schema.Schema({
         ("refid", "INTEGER", True),      # ID of the type being referenced
         ("extent_start", "INTEGER", True),
         ("extent_end", "INTEGER", True),
+        ("qualname", "VARCHAR(256)", False), # Used when we don't have a refid from rustc
         ("_location", True),
         ("_location", True, 'referenced'),
         ("_fkey", "refid", "types", "id"),
@@ -100,11 +104,51 @@ schema = dxr.schema.Schema({
         ("extent_end", "INTEGER", True),
         ("_location", True),
         # id is not a primary key - an impl can have two representations - one
-        # for the trait and on for the struct.
+        # for the trait and one for the struct.
         ("_fkey", "refid", "types", "id"),
     ],
+    # We use a simpler version of the callgraph than the Clang plugin - there is
+    # no targets table, and callers maps a caller to all possible callees.
+    "callers": [
+        ("callerid", "INTEGER", False), # The function in which the call occurs
+        ("targetid", "INTEGER", False), # The target of the call
+        ("_key", "callerid", "targetid"),
+        ("_fkey", "callerid", "functions", "id")
+    ],
+    # Used for looking links for extern mods
+    "extern_locations": [
+        ("location", "VARCHAR(256)", False),
+        ("docurl", "VARCHAR(256)", True),
+        ("srcurl", "VARCHAR(256)", True),
+        ("dxrurl", "VARCHAR(256)", True),
+        ("_key", "location"),
+    ],
+    # indexed crates
+    "crates": [
+        ("name", "VARCHAR(256)", False),
+        ("extent_start", "INTEGER", True),
+        ("extent_end", "INTEGER", True),
+        ("_location", True),
+        ("_key", "name"),
+    ],
+    # items in other crates
+    "unknowns": [
+        ("id", "INTEGER", False),
+        ("crate", "VARCHAR(256)", False),
+        ("_key", "id"),
+        ("_fkey", "crate", "crates", "name"),
+    ],
+    # References to items in other crates
+    "unknown_refs": [
+        ("refid", "INTEGER", False),
+        ("extent_start", "INTEGER", False),
+        ("extent_end", "INTEGER", False),
+        ("_location", True),
+        ("_location", True, 'referenced'),
+        ("_fkey", "refid", "unknowns", "id"),
+        ("_index", "refid"),
+    ],
 })
-
 
 def post_process(tree, conn):
     print "rust-dxr post-process"
@@ -112,14 +156,11 @@ def post_process(tree, conn):
     print " - Adding tables"
     conn.executescript(schema.get_create_sql())
 
+    print " - Processing files"
     temp_folder = os.path.join(tree.temp_folder, 'plugins', PLUGIN_NAME)
-    #process_csv('/home/vagrant/dxr/tests/test_rust/code/main.csv','main',conn)
     for root, dirs, files in os.walk(temp_folder):
-        for f in files:
-            if f.endswith('.csv'):
-                print " - Processing %s" % f
-                crate_name = root[:f.index('.csv')]
-                process_csv(os.path.join(root, f), crate_name, conn)
+        for f in [f for f in files if f.endswith('.csv')]:
+            process_csv(os.path.join(root, f), conn)
 
         # don't need to look in sub-directories
         break
@@ -130,6 +171,10 @@ def post_process(tree, conn):
 
     print " - Generating inheritance graph"
     generate_inheritance(conn)
+    generate_callgraph(conn)
+
+    print " - Generating crate info"
+    generate_locations(conn)
 
     print " - Committing changes"
     conn.commit()
@@ -141,13 +186,23 @@ files = {}
 ctor_ids = {}
 
 # map from the id of a module to the id of its parent (or 0), if there is no parent
-# TODO are we going to use this? If not remove stuff from dxr.rs too
+# TODO are we going to use this? it can be saved as scopeid in modules like we do
+# with other scopes
 mod_parents = {}
 
 # list of (base, derived) trait ids
 inheritance = []
 
-# TODO need to take into account the crate?
+# maps crate-local crate nums to global crate names and module ids
+crate_map = {}
+
+# We know these crates come from the rust distribution (probably, the user could
+# override that, but lets assume for now...).
+std_libs = ['std', 'extra', 'native', 'green', 'syntax', 'rustc', 'rustpkg', 'rustdoc', 'rustuv']
+# These are the crates used in the current crate and indexed by DXR in the
+# current run.
+local_libs = []
+
 def get_file_id(file_name, conn):
     file_id = files.get(file_name, False)
 
@@ -164,7 +219,10 @@ def get_file_id(file_name, conn):
     files[file_name] = file_id
     return file_id
 
-def process_csv(file_name, crate_name, conn):
+def process_csv(file_name, conn):
+    global crate_map
+    crate_map = {}
+
     try:
         f = open(file_name, 'rb')
         parsed_iter = csv.reader(f)
@@ -205,77 +263,221 @@ def execute_sql(conn, stmt):
     else:
         conn.execute(stmt)
 
+next_id = 0;
+id_map = {}
+
+def get_next_id():
+    global next_id
+    next_id += 1
+    return next_id
+
+# maps a crate name and a node number to a globally unique id
+def find_id_in(crate, node):
+    global id_map
+
+    if node == '0':
+        return 0
+
+    if (crate, node) not in id_map:
+        result = get_next_id()
+        # Our IDs are SQLite INTEGERS which are 64bit, so we are unlikely to overflow.
+        # Python ints do not overflow.
+        id_map[(crate, node)] = result
+        return result
+
+    return id_map[(crate, node)]
+
+#TODO delete me
+def find_id(crate, node):
+    x = find_id_in(crate, node)
+    #print crate, node, x
+    return x
+
+# XXX this feels a little bit fragile...
+def convert_ids(args, conn):
+    def convert(k, v):
+        if k.endswith('crate'):
+            return -1
+        elif k == 'ctor_id' or k == 'aliasid':
+            return v
+        elif k == 'id' or k == 'scopeid':
+            return find_id(crate_map['0'][0], v)
+        elif k.endswith('id') or k == 'base' or k == 'derived':
+            return find_id(crate_map[args[k + 'crate']][0], v)
+        else:
+            return v
+
+    new_args = {k: convert(k, v) for k, v in args.items() if not k.endswith('crate')}
+    new_args['file_id'] = get_file_id(args['file_name'], conn)
+    return new_args
+
+# Returns True if the refid in the args points to an item in an external crate.
+def add_external_item(args, conn):
+    node, crate = args['refid'], args['refidcrate']
+    crate = crate_map[crate][0]
+    if crate in local_libs or not node:
+        return False
+
+    requires_item = (crate, node) not in id_map
+    execute_sql(conn, schema.get_insert_sql('unknown_refs', convert_ids(args, conn)))
+
+    if not requires_item:
+        return True
+
+    item_args = {}
+    item_args['id'] = find_id(crate, node)
+    item_args['crate'] = crate
+    execute_sql(conn, schema.get_insert_sql('unknowns', item_args))
+    return True
+
 def process_function(args, conn):
     args['name'] = args['qualname'].split('::')[-1]
     args['language'] = 'rust'
     args['args'] = ''
     args['type'] = ''
-    args['file_id'] = get_file_id(args['file_name'], conn)
 
-    execute_sql(conn, language_schema.get_insert_sql('functions', args))
+    execute_sql(conn, language_schema.get_insert_sql('functions', convert_ids(args, conn)))
+
+def process_method_decl(args, conn):
+    args['name'] = args['qualname'].split('::')[-1]
+    args['language'] = 'rust'
+    args['args'] = ''
+    args['type'] = ''
+
+    # TODO either share code with process_function, or store the decl somewhere else
+    execute_sql(conn, language_schema.get_insert_sql('functions', convert_ids(args, conn)))
 
 def process_fn_call(args, conn):
-    args['file_id'] = get_file_id(args['file_name'], conn)
+    if add_external_item(args, conn):
+        return;
 
-    execute_sql(conn, schema.get_insert_sql('function_refs', args))
-    
+    execute_sql(conn, schema.get_insert_sql('function_refs', convert_ids(args, conn)))
+
+def process_method_call(args, conn):
+    if args['refid'] == '0':
+        args['refid'] = None
+    if add_external_item(args, conn):
+        return;
+
+    execute_sql(conn, schema.get_insert_sql('function_refs', convert_ids(args, conn)))
+
 def process_variable(args, conn):
     args['language'] = 'rust'
     args['type'] = ''
-    args['value'] = '' # XXX for const items etc., we can show the value as a tooltip
-    args['file_id'] = get_file_id(args['file_name'], conn)
 
-    execute_sql(conn, language_schema.get_insert_sql('variables', args))
+    execute_sql(conn, language_schema.get_insert_sql('variables', convert_ids(args, conn)))
 
 def process_var_ref(args, conn):
-    args['file_id'] = get_file_id(args['file_name'], conn)
+    if add_external_item(args, conn):
+        return;
 
-    execute_sql(conn, schema.get_insert_sql('variable_refs', args))
+    execute_sql(conn, schema.get_insert_sql('variable_refs', convert_ids(args, conn)))
 
 def process_struct(args, conn):
     # Used for fixing up the refid in fixup_struct_ids
     if args['ctor_id'] != '0':
-        ctor_ids[args['ctor_id']] = args['id']
+        ctor_ids[args['ctor_id']] = find_id('', args['id'])
 
     args['name'] = args['qualname'].split('::')[-1]
-    args['file_id'] = get_file_id(args['file_name'], conn)
     args['kind'] = 'struct'
     args['language'] = 'rust'
 
-    execute_sql(conn, language_schema.get_insert_sql('types', args))
+    # TODO add to scopes too
+    execute_sql(conn, language_schema.get_insert_sql('types', convert_ids(args, conn)))
 
 def process_trait(args, conn):
     args['name'] = args['qualname'].split('::')[-1]
-    args['file_id'] = get_file_id(args['file_name'], conn)
     args['kind'] = 'trait'
     args['language'] = 'rust'
 
-    execute_sql(conn, language_schema.get_insert_sql('types', args))
+    # TODO add to scopes too
+    execute_sql(conn, language_schema.get_insert_sql('types', convert_ids(args, conn)))
 
 def process_struct_ref(args, conn):
+    if 'qualname' not in args:
+        args['qualname'] = ''
+    if add_external_item(args, conn):
+        return;
     process_type_ref(args, conn)
 
 def process_module(args, conn):
-    mod_parents[int(args['id'])] = int(args['parent'])
+    mod_parents[int(args['id'])] = int(args['scopeid'])
 
     args['name'] = args['qualname'].split('::')[-1]
     args['language'] = 'rust'
-    args['file_id'] = get_file_id(args['file_name'], conn)
     args['def_file'] = get_file_id(args['def_file'], conn)
 
-    execute_sql(conn, schema.get_insert_sql('modules', args))
+    # TODO add to scopes too
+    execute_sql(conn, schema.get_insert_sql('modules', convert_ids(args, conn)))
 
 def process_mod_ref(args, conn):
-    args['file_id'] = get_file_id(args['file_name'], conn)
+    if add_external_item(args, conn):
+        return;
     args['aliasid'] = 0
 
-    execute_sql(conn, schema.get_insert_sql('module_refs', args))
+    execute_sql(conn, schema.get_insert_sql('module_refs', convert_ids(args, conn)))
 
 def process_module_alias(args, conn):
-    args['file_id'] = get_file_id(args['file_name'], conn)
     args['qualname'] = args['file_name'] + "$" + args['name']
 
+    execute_sql(conn, schema.get_insert_sql('module_aliases', convert_ids(args, conn)))
+
+def process_impl(args, conn):
+    # TODO add to scopes too
+    execute_sql(conn, schema.get_insert_sql('impl_defs', convert_ids(args, conn)))
+
+def process_typedef(args, conn):
+    args['name'] = args['qualname'].split('::')[-1]
+    args['kind'] = 'typedef'
+    args['language'] = 'rust'
+
+    execute_sql(conn, language_schema.get_insert_sql('types', convert_ids(args, conn)))
+
+def process_type_ref(args, conn):
+    if 'qualname' not in args:
+        args['qualname'] = ''
+    if add_external_item(args, conn):
+        return;
+
+    execute_sql(conn, schema.get_insert_sql('type_refs', convert_ids(args, conn)))
+
+def process_extern_mod(args, conn):
+    args['qualname'] = args['file_name'] + "$" + args['name']
+    args['refid'] = '0'
+    args['refidcrate'] = '0'
+    crate = args['crate']
+    args = convert_ids(args, conn)
+    # module ids from crate_map are post-transform
+    args['refid'] = crate_map[crate][1]
+
     execute_sql(conn, schema.get_insert_sql('module_aliases', args))
+
+# These have to happen before anything else in the csv and have to be concluded by
+# by 'end_external_crate'.
+def process_external_crate(args, conn):
+    global crate_map
+    mod_id = get_next_id()
+    crate_map[args['crate']] = (args['name'], mod_id)
+
+    args = {'id': mod_id,
+            'name': args['name'],
+            'qualname': args['file_name'] + "$" + args['name'],
+            'def_file': get_file_id(args['file_name'], conn),
+            'extent_start': -1,
+            'extent_end': -1}
+    # don't need to convert_args because the args are all post-transform
+    execute_sql(conn, schema.get_insert_sql('modules', args))
+
+def process_end_external_crates(args, conn):
+    # We've got all the info we're going to get about external crates now.
+    global local_libs
+    local_libs = [name for (name, cid) in crate_map.values() if name not in std_libs]
+
+# There should only be one of these per crate and it gives info about the current
+# crate.
+def process_crate(args, conn):
+    crate_map['0'] = (args['name'], 0)
+    execute_sql(conn, schema.get_insert_sql('crates', convert_ids(args, conn)))
 
 # When we have a path like a::b::c, we want to have info for a and a::b.
 # Unfortunately Rust does not give us much info, so we have to
@@ -283,43 +485,49 @@ def process_module_alias(args, conn):
 # We have the qualname for the module (e.g, a or a::b) but we do not have
 # the refid
 def fixup_sub_mods(conn):
+    fixup_sub_mods_impl(conn, 'modules', 'module_refs')
+    # paths leading up to a static method have a module path, then a type at the
+    # so we have to fixup the type in the same way as we do modules.
+    fixup_sub_mods_impl(conn, 'types', 'type_refs')
+
+def fixup_sub_mods_impl(conn, table_name, table_ref_name):
     # First create refids for module refs whose qualnames match the qualname of
     # the module (i.e., no aliases).
     conn.execute("""
-        UPDATE module_refs SET
-            refid=(SELECT id FROM modules WHERE modules.qualname = module_refs.qualname)
-        WHERE refid=0 AND aliasid=0 AND
-            (SELECT id FROM modules WHERE modules.qualname = module_refs.qualname) IS NOT NULL
-        """)
+        UPDATE %(ref)s SET
+            refid=(SELECT id FROM %(tab)s WHERE %(tab)s.qualname = %(ref)s.qualname)
+        WHERE refid=0 AND
+            (SELECT id FROM %(tab)s WHERE %(tab)s.qualname = %(ref)s.qualname) IS NOT NULL
+        """%{'tab':table_name,'ref':table_ref_name})
 
-    # Next account for where the path is an aliased modules e.g., alias::c,
-    # where c is already accounted for.
-    # We can't do all this in one statement because sqlite does not have joins.
-    cur = conn.execute("""
-        SELECT module_refs.extent_start, module_aliases.id, modules.id,
-           module_aliases.name, modules.name, modules.qualname,
-           (SELECT path FROM files WHERE files.id = module_refs.file_id)
-        FROM module_refs, module_aliases, modules
-        WHERE module_refs.refid = 0 AND
-           module_refs.aliasid = 0 AND
-           module_refs.file_id = module_aliases.file_id AND
-           module_aliases.name = module_refs.qualname AND
-           modules.id = module_aliases.refid
-        """)
+    if table_name == 'modules':
+        # Next account for where the path is an aliased modules e.g., alias::c,
+        # where c is already accounted for.
+        # We can't do all this in one statement because sqlite does not have joins.
+        cur = conn.execute("""
+            SELECT refs.extent_start, module_aliases.id, modules.id,
+               module_aliases.name, modules.name, modules.qualname,
+               (SELECT path FROM files WHERE files.id = refs.file_id)
+            FROM module_refs AS refs, module_aliases, modules
+            WHERE refs.refid = 0 AND
+               refs.file_id = module_aliases.file_id AND
+               module_aliases.name = refs.qualname AND
+               modules.id = module_aliases.refid
+            """)
 
-    for ex_start, aliasid, refid, name, mod_name, qualname, file_name in cur:
-        # Aliases only have file scope, but we don't need to qualify purely
-        # truncating aliases (the implicit kind).
-        if name != mod_name:
-            qualname = file_name + "$" + name
-        conn.execute("""
-            UPDATE module_refs SET
-               refid = ?,
-               aliasid = ?,
-               qualname = ?
-            WHERE extent_start=?
-            """,
-            (refid, aliasid, qualname, ex_start))
+        for ex_start, aliasid, refid, name, mod_name, qualname, file_name in cur:
+            # Aliases only have file scope, but we don't need to qualify purely
+            # truncating aliases (the implicit kind).
+            if name != mod_name:
+                qualname = file_name + "$" + name
+            conn.execute("""
+                UPDATE module_refs SET
+                   refid = ?,
+                   aliasid = ?,
+                   qualname = ?
+                WHERE extent_start=?
+                """,
+                (refid, aliasid, qualname, ex_start))
 
     # And finally, the most complex case where the path is of the form
     # alias::b::c (this subsumes the above case, but I separate them out because
@@ -329,17 +537,16 @@ def fixup_sub_mods(conn):
     # the first query the module is the one the alias refers to, in the second
     # it is the one which the whole path refers to.
     cur = conn.execute("""
-        SELECT module_refs.extent_start, module_aliases.id,
-            module_aliases.name, modules.name, modules.qualname, module_refs.qualname,
-            (SELECT path FROM files WHERE files.id = module_refs.file_id)
-        FROM module_refs, module_aliases, modules
-        WHERE module_refs.refid = 0 AND
-            module_refs.aliasid = 0 AND
-            module_refs.file_id = module_aliases.file_id AND
-            module_refs.qualname LIKE module_aliases.name || '%' AND
+        SELECT refs.extent_start,
+            module_aliases.name, modules.name, modules.qualname, refs.qualname,
+            (SELECT path FROM files WHERE files.id = refs.file_id)
+        FROM %s as refs, module_aliases, modules
+        WHERE refs.refid = 0 AND
+            refs.file_id = module_aliases.file_id AND
+            refs.qualname LIKE module_aliases.name || '%%' AND
             modules.id = module_aliases.refid
-        """)
-    for ex_start, aliasid, alias_name, mod_name, qualname, ref_name, file_name in cur:
+        """%table_ref_name)
+    for ex_start, alias_name, mod_name, qualname, ref_name, file_name in cur:
         no_alias = ref_name.replace(alias_name, qualname)
         cur = conn.execute("""
             SELECT id, qualname
@@ -351,18 +558,12 @@ def fixup_sub_mods(conn):
         if mod:
             (refid, qualname) = mod
             conn.execute("""
-                UPDATE module_refs SET
+                UPDATE %s SET
                    refid = ?,
-                   aliasid = ?,
                    qualname = ?
                 WHERE extent_start=?
-                """,
-                (refid, aliasid, qualname, ex_start))
-
-def process_type_ref(args, conn):
-    args['file_id'] = get_file_id(args['file_name'], conn)
-
-    execute_sql(conn, schema.get_insert_sql('type_refs', args))
+                """%table_ref_name,
+                (refid, qualname, ex_start))
 
 def fixup_struct_ids(conn):
     # Sadness. Structs have an id for their definition and an id for their ctor.
@@ -396,15 +597,45 @@ def generate_inheritance(conn):
             conn.execute("INSERT OR IGNORE INTO impl(tbase, tderived, inhtype) VALUES (?, ?, NULL)",
                          (base, deriv))
 
-def process_impl(args, conn):
-    args['file_id'] = get_file_id(args['file_name'], conn)
+def generate_callgraph(conn):
+    # staticaly  dispatched call
+    sql = """
+        SELECT refs.refid, refs.scopeid
+        FROM function_refs as refs, functions
+        WHERE
+            functions.id = refs.scopeid
+    """
+    for callee, caller in conn.execute(sql):
+        conn.execute("INSERT OR IGNORE INTO callers(callerid, targetid) VALUES (?, ?)",
+                     (caller, callee))
 
-    execute_sql(conn, schema.get_insert_sql('impl_defs', args))
+    # dynamically dispatched call
+    sql = """
+        SELECT callee.id, refs.scopeid
+        FROM function_refs as refs, functions as callee, functions as caller
+        WHERE
+            caller.id = refs.scopeid
+            AND refs.refid IS NULL
+            AND refs.declid = callee.declid
+    """
+    for callee, caller in conn.execute(sql):
+        conn.execute("INSERT OR IGNORE INTO callers(callerid, targetid) VALUES (?, ?)",
+                     (caller, callee))
 
-def process_typedef(args, conn):
-    args['name'] = args['qualname'].split('::')[-1]
-    args['file_id'] = get_file_id(args['file_name'], conn)
-    args['kind'] = 'typedef'
-    args['language'] = 'rust'
+def generate_locations(conn):
+    # standard lib crates
+    sql = """
+        INSERT OR IGNORE INTO extern_locations(location, docurl, srcurl, dxrurl) VALUES (?, ?, ?, ?)
+    """
+    docurl = "http://static.rust-lang.org/doc/master/%s/index.html"
+    srcurl = "https://github.com/mozilla/rust/tree/master/src/lib%s"
+    dxrurl = "http://dxr.mozilla.org/rust/source/lib%s/lib.rs.html"
+    for l in std_libs:
+        conn.execute(sql, (l, docurl%l, srcurl%l, dxrurl%l))
 
-    execute_sql(conn, language_schema.get_insert_sql('types', args))
+    # crates from github
+    sql = "SELECT location FROM module_aliases WHERE location LIKE 'github.com'"
+    srcurl = "https://%s"
+    for l in conn.execute(sql):
+        conn.execute("INSERT OR IGNORE INTO extern_locations(location, docurl, srcurl, dxrurl) VALUES (?, '', ?, '')", (l, srcurl%l))
+        

@@ -19,7 +19,7 @@ _parameters = ["path", "ext",
 "namespace-alias", "namespace-alias-ref",
 "module", "module-ref", "module-use",
 "module-alias", "module-alias-ref",
-"impl",
+"impl", "fn-impls", "extern-ref",
 "macro", "macro-ref", "callers", "called-by",
 "overridden", "overrides", "warning",
 "warning-opt", "bases", "derived", "member"]
@@ -164,8 +164,6 @@ class Query(object):
         arguments += [limit, offset]
 
         #TODO Actually do something with the has_extents, ie. don't fetch contents
-        print "executing sql: " + sql + " args: " + str(arguments)
-
         cursor = self.execute_sql(sql, arguments)
 
         # For each returned file (including, only in the case of the trilite
@@ -241,7 +239,7 @@ class Query(object):
         # See if we can find only one file match
         cur.execute("""
             SELECT path FROM files WHERE
-                path LIKE :term
+                path = :term
                 OR path LIKE :termPre 
             LIMIT 2
         """, {"term": term,
@@ -1036,6 +1034,46 @@ filters = [
         qual_name     = "types.qualname"
     ),
 
+    # find implementations of a trait method
+    ExistsLikeFilter(
+        param         = "fn-impls",
+        filter_sql    = """SELECT 1 FROM functions AS def, functions AS decl
+                           WHERE %s
+                             AND decl.id = def.declid
+                             AND def.file_id = files.id
+                        """,
+        ext_sql       = """SELECT def.extent_start, def.extent_end
+                           FROM functions AS def, functions AS decl
+                           WHERE def.file_id = ?
+                             AND EXISTS (SELECT 1 FROM types
+                                         WHERE %s
+                                           AND decl.id = def.declid)
+                           ORDER BY def.extent_start
+                        """,
+        like_name     = "decl.name",
+        qual_name     = "decl.qualname"
+    ),
+
+    # external items filter
+    ExistsLikeFilter(
+        param         = "extern-ref",
+        filter_sql    = """SELECT 1 FROM unknowns, unknown_refs AS refs
+                           WHERE %s
+                             AND unknowns.id = refs.refid AND refs.file_id = files.id
+                        """,
+        ext_sql       = """SELECT refs.extent_start, refs.extent_end FROM unknown_refs AS refs
+                           WHERE refs.file_id = ?
+                             AND EXISTS (SELECT 1 FROM unknowns
+                                         WHERE %s
+                                           AND unknowns.id = refs.refid)
+                           ORDER BY refs.extent_start
+                        """,
+        like_name     = "unknowns.id",
+        qual_name     = "unknowns.id"
+    ),
+
+
+>>>>>>> aeda23d01687957c7e9377c65e890fbdfc458433
     # macro filter
     ExistsLikeFilter(
         param         = "macro",
