@@ -243,7 +243,7 @@ def process_csv(file_name, conn):
             try:
                 globals()['process_' + line[0]](args, conn)
             except KeyError:
-                print " - process_"+line[0]+" not implemented!"
+                print " - process_" + line[0] + " not implemented!"
 
             limit += 1
             if limit > 10000:
@@ -358,9 +358,8 @@ def process_method_decl(args, conn):
 def process_enum(args, conn):
     args['language'] = 'rust'
     args['kind'] = 'enum'
-    args['file_id'] = get_file_id(args['file_name'], conn)
     args['name'] = args['qualname'].split('::')[-1]
-    execute_sql(conn, language_schema.get_insert_sql('types', args))
+    execute_sql(conn, language_schema.get_insert_sql('types', convert_ids(args, conn)))
 
 def process_variant(args, conn):
     process_variable(args, conn)
