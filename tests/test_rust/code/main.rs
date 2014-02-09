@@ -114,11 +114,11 @@ fn f_with_params<T: SomeTrait>(x: &T) {
     x.Method(41);
 }
 
-enum SomeEnum {
+enum SomeEnum<T, U> {
     Ints(int, int),
     Floats(f64, f64),
     Strings(~str, ~str, ~str),
-    MyTypes(MyType, MyType)
+    MyTypes(T, U)
 }
 
 enum SomeOtherEnum {
@@ -132,12 +132,12 @@ enum SomeStructEnum {
     EnumStruct2{f1:MyType, f2:MyType}
 }
 
-fn matchSomeEnum(val: SomeEnum) {
+fn matchSomeEnum<T: SomeTrait, U: SomeTrait>(val: SomeEnum<T, U>) {
     match val {
         Ints(int1, int2) => { hello((1u32,~"a")); println((int1+int2).to_str()); }
         Floats(float1, float2) => { println((float2*float1).to_str()); }
         Strings(_, _, s3) => { println(s3); }
-        MyTypes(mt1, mt2) => { println((mt1.field1 - mt2.field1).to_str()); }
+        MyTypes(mt1, mt2) => { println((mt1.Method(41) - mt2.Method(41)).to_str()); }
     }
 }
 
@@ -205,8 +205,8 @@ fn main() {
     let s5: MyType = ~some_fields{ field1: 55};
     let s = SameDir::SameStruct{name:~"Bob"};
     let s = SubDir::SubStruct{name:~"Bob"};
-    let s6: SomeEnum = MyTypes(~s2, s5);
-    let s7: SomeEnum = Strings(~"one",~"two",~"three");
+    let s6 = MyTypes(some_fields{field1: 55}, some_fields{field1: 55});
+    let s7: SomeEnum<some_fields, some_fields> = Strings(~"one",~"two",~"three");
     matchSomeEnum(s6);
     matchSomeEnum(s7);
     let s8: SomeOtherEnum = SomeConst2;
