@@ -42,6 +42,36 @@ mod sub {
     }
 }
 
+mod params {
+    use std::io::stdio::println;
+    struct NumContainer<T> {
+        field: T
+    }
+
+    impl<T:Eq> Eq for NumContainer<T> {
+        fn eq(&self, _: &NumContainer<T>) -> bool {
+            true
+        }
+    }
+
+    impl<T:Add<T,T>> Add<NumContainer<T>, NumContainer<T>> for NumContainer<T> {
+        fn add(&self, rhs: &NumContainer<T>) -> NumContainer<T> {
+            NumContainer{field: self.field + rhs.field}
+        }
+    }
+
+    impl<U:ToStr> ToStr for NumContainer<U> {
+        fn to_str(&self) -> ~str {
+            self.field.to_str()
+        }
+    }
+
+    pub fn test_params() {
+        let n1 = NumContainer{field: 10};
+        let n2 = NumContainer{field: -10};
+        println((n1+n2).to_str()); }
+}
+
 pub mod SameDir;
 pub mod SubDir;
 
@@ -213,4 +243,5 @@ fn main() {
     matchSomeOtherEnum(s8);
     let s9: SomeStructEnum = EnumStruct2{f1: ~some_fields{field1:10}, f2: ~s2};
     matchSomeStructEnum(s9);
+    params::test_params();
 }
