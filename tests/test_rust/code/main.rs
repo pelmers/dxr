@@ -44,8 +44,14 @@ mod sub {
 
 mod params {
     use std::io::stdio::println;
+    enum SingleOrDouble<T> {
+        Single(T),
+        Double(T, T)
+    }
+
     struct NumContainer<T> {
-        field: T
+        field1: T,
+        field2: SingleOrDouble<T>
     }
 
     impl<T:Eq> Eq for NumContainer<T> {
@@ -56,19 +62,28 @@ mod params {
 
     impl<T:Add<T,T>> Add<NumContainer<T>, NumContainer<T>> for NumContainer<T> {
         fn add(&self, rhs: &NumContainer<T>) -> NumContainer<T> {
-            NumContainer{field: self.field + rhs.field}
+            let me = match self.field2 {
+                Single(ref num) => *num + *num,
+                Double(ref num1, ref num2) => *num1 + *num2
+            };
+            let notme = match rhs.field2 {
+                Single(ref num) => *num + *num,
+                Double(ref num1, ref num2) => *num1 + *num2
+            };
+            NumContainer{field1: self.field1 + rhs.field1,
+                         field2: Double(notme, me)}
         }
     }
 
     impl<U:ToStr> ToStr for NumContainer<U> {
         fn to_str(&self) -> ~str {
-            self.field.to_str()
+            self.field1.to_str()
         }
     }
 
     pub fn test_params() {
-        let n1 = NumContainer{field: 10};
-        let n2 = NumContainer{field: -10};
+        let n1 = NumContainer{field1: 10, field2: Single(12)};
+        let n2 = NumContainer{field1: -10, field2: Double(-8, -10)};
         println((n1+n2).to_str()); }
 }
 
