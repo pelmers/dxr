@@ -122,6 +122,8 @@ class Mercurial(VCS):
         return self.upstream + 'annotate/' + self.revision + '/' + path
 
     def generate_diff(self, path):
+        previous_rev = self.invoke_vcs(['hg', 'log', '-r', 'last(file("{}"))'.format(path)]).strip()
+        print previous_rev
         return self.upstream + 'diff/' + self.revision + '/' + path
 
     def generate_raw(self, path):
@@ -247,6 +249,7 @@ class TreeToIndex(dxr.indexers.TreeToIndex):
         keys in ``self.lookup_order``.
 
         """
+        self.source_repositories = {}
         # Find all of the VCSs in the source directory:
         for cwd, dirs, files in os.walk(self.tree.source_folder):
             for vcs in every_vcs:
@@ -295,7 +298,7 @@ class FileToIndex(dxr.indexers.FileToIndex):
             yield 'raw', "Raw", vcs.generate_raw(vcs_relative_path)
 
         abs_path = self.absolute_path()
-        vcs = _find_vcs_for_file(abs_path)
+        vcs = self._find_vcs_for_file(abs_path)
         if vcs:
             vcs_relative_path = relpath(abs_path, vcs.get_root_dir())
             yield (5,
@@ -304,7 +307,7 @@ class FileToIndex(dxr.indexers.FileToIndex):
         else:
             yield 5, 'Untracked file', []
 
-    def _find_vcs_for_file(abs_path):
+    def _find_vcs_for_file(self, abs_path):
         """Given an absolute path, find a source repository we know about that
         claims to track that file.
 

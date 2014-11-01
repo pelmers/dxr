@@ -29,7 +29,7 @@ class Config(object):
         # Create parser with sane defaults
         parser = ConfigParser({
             'plugin_folder':    "%s/plugins" % dirname(dxr.__file__),
-            'nb_jobs':          1,
+            'nb_jobs':          "1",
             'temp_folder':      "/tmp/dxr-temp",
             'log_folder':       "%(temp_folder)s/logs",
             'wwwroot':          "/",
