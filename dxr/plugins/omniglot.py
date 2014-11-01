@@ -95,6 +95,9 @@ class Mercurial(VCS):
         if upstream.scheme == 'ssh':
             recomb[0] == 'http'
         recomb[1] = upstream.hostname # Eliminate any username stuff
+        # check if port is defined and add that to the url
+        if upstream.port:
+            recomb[1] += ":{}".format(upstream.port)
         recomb[2] = '/' + recomb[2].lstrip('/') # strip all leading '/', add one back
         if not upstream.path.endswith('/'):
             recomb[2] += '/' # Make sure we have a '/' on the end
@@ -122,9 +125,12 @@ class Mercurial(VCS):
         return self.upstream + 'annotate/' + self.revision + '/' + path
 
     def generate_diff(self, path):
-        previous_rev = self.invoke_vcs(['hg', 'log', '-r', 'last(file("{}"))'.format(path)]).strip()
-        print previous_rev
-        return self.upstream + 'diff/' + self.revision + '/' + path
+        previous_rev = self.invoke_vcs(['hg', 'log', '-r', 'last(file("{}"))'.format(path), '--style=compact']).strip()
+        # pull out the commit hash from the compact log entry
+        # ex: 1   2e86c4e11a82   2004-9-12 10:36 -0500   ancient
+        #          ^wanted^
+        previous_rev = previous_rev.split()[1]
+        return self.upstream + 'diff/' + previous_rev + '/' + path
 
     def generate_raw(self, path):
         return self.upstream + 'raw-file/' + self.revision + '/' + path
