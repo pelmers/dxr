@@ -9,7 +9,7 @@ from sys import stderr
 from time import time
 from mimetypes import guess_type
 from urllib import quote_plus
-
+from datetime import datetime
 from flask import (Blueprint, Flask, send_from_directory, current_app,
                    send_file, request, redirect, jsonify, render_template,
                    url_for)
@@ -24,6 +24,7 @@ from dxr.exceptions import BadTerm
 from dxr.filters import FILE, LINE
 from dxr.lines import html_line
 from dxr.mime import icon, is_image
+from dxr.vcs import tree_to_repos
 from dxr.plugins import plugins_named
 from dxr.query import Query, filter_menu_items
 from dxr.utils import (non_negative_int, decode_es_datetime, DXR_BLUEPRINT,
@@ -55,6 +56,10 @@ def make_app(config):
 
     # Make an ES connection pool shared among all threads:
     app.es = ElasticSearch(config.es_hosts)
+
+    # Track any version control systems under the trees.
+    app.vcs_repositories = dict((k, tree_to_repos(v)) for k,v in
+        config.trees.items())
 
     return app
 
@@ -216,7 +221,30 @@ def browse(tree, path=''):
     try:
         return _browse_folder(tree, path, config)
     except NotFound:
-        return _browse_file(tree, path, config)
+        # Grab the FILE doc, just for the sidebar nav links:
+        files = filtered_query(
+            frozen['es_alias'],
+            FILE,
+            filter={'path': path},
+            size=1,
+            include=['links'])
+        if not files:
+            raise NotFound
+        links = files[0].get('links', [])
+
+        lines = filtered_query(
+            frozen['es_alias'],
+            LINE,
+            filter={'path': path},
+            sort=['number'],
+            size=1000000,
+            include=['content', 'tags', 'annotations'])
+        return _browse_file(tree,
+                            path,
+                            config,
+                            lines,
+                            links,
+                            frozen_config(tree)['generated_date'])
 
 
 def _browse_folder(tree, path, config):
@@ -269,7 +297,7 @@ def _browse_folder(tree, path, config):
             for f in files_and_folders])
 
 
-def _browse_file(tree, path, config):
+def _browse_file(tree, path, config, lines, links, generated_date):
     """Return a rendered page displaying a source file.
 
     If there is no such file, raise NotFound.
@@ -284,28 +312,6 @@ def _browse_file(tree, path, config):
         # Sort by order, resolving ties by section name:
         return sorted(sections, key=lambda section: (section['order'],
                                                      section['heading']))
-
-    frozen = frozen_config(tree)
-
-    # Grab the FILE doc, just for the sidebar nav links:
-    files = filtered_query(
-        frozen['es_alias'],
-        FILE,
-        filter={'path': path},
-        size=1,
-        include=['links'])
-    if not files:
-        raise NotFound
-    links = files[0].get('links', [])
-
-    lines = filtered_query(
-        frozen['es_alias'],
-        LINE,
-        filter={'path': path},
-        sort=['number'],
-        size=1000000,
-        include=['content', 'tags', 'annotations'])
-
     # Common template variables:
     common = {
         'www_root': config.www_root,
@@ -315,7 +321,7 @@ def _browse_file(tree, path, config):
               url_for('.parallel', tree=t['name'], path=path),
               t['description'])
             for t in frozen_configs()],
-        'generated_date': frozen['generated_date'],
+        'generated_date': generated_date,
         'google_analytics_key': config.google_analytics_key,
         'filters': filter_menu_items(
             plugins_named(frozen_config(tree)['enabled_plugins'])),
@@ -334,6 +340,7 @@ def _browse_file(tree, path, config):
             'image_file.html',
             **merge(common, file_vars))
     else:  # For now, we don't index binary files, so this is always a text one
+        # TODO: run file skimmers at this point
         return render_template(
             'text_file.html',
             **merge(common, file_vars, {
@@ -344,6 +351,26 @@ def _browse_file(tree, path, config):
                            doc.get('annotations', [])) for doc in lines],
                 'is_text': True,
                 'sections': sidebar_links(links)}))
+
+@dxr_blueprint.route('/<tree>/rev/<revision>/<path:path>')
+def permalink(tree, revision, path):
+    # TODO notes:
+    # run filetoskims on the file contents
+    contents = None
+    config = current_app.dxr_config
+    for vcs in current_app.vcs_repositories[tree].values():
+        if vcs.is_tracked(path):
+            contents = vcs.get_contents(path, revision)
+            break
+    if contents is None:
+        return render_template('error.html', error_html='No VCS found'), 400
+    # We do some wrapping to mimic the JSON returned by an ES lines query.
+    return _browse_file(tree,
+                        path,
+                        config,
+                        [{'content': [line]} for line in contents.split('\n')],
+                        [],
+                        datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000"))
 
 
 def _linked_pathname(path, tree_name):
