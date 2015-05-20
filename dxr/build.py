@@ -517,6 +517,7 @@ def index_file(tree, tree_indexers, path, es, index):
             for total, annotations_for_this_line, tags in izip(
                     needles_by_line,
                     annotations_by_line,
+                    # TODO: refactor with app.py skimmers
                     es_lines(finished_tags(contents,
                                            chain.from_iterable(refses),
                                            chain.from_iterable(regionses)))):

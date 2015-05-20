@@ -86,6 +86,25 @@ class FileToIndex(dxr.indexers.FileToIndex):
 
     def regions(self):
         lexer = _lexer_for_filename(basename(self.path))
+        lexer = None
+        if lexer:
+            for index, token, text in lexer.get_tokens_unprocessed(self.contents):
+                cls = token_classes.get(token)
+                if cls:
+                    yield index, index + len(text), cls
+
+class FileToSkim(dxr.indexers.FileToSkim):
+    """Emitter of CSS classes for syntax-highlit regions"""
+
+    def is_interesting(self):
+        """
+        Files that already have regions defined are not interesting, since we
+        have probably already pygmentized them with FileToIndex.
+        """
+        return True
+
+    def regions(self):
+        lexer = _lexer_for_filename(basename(self.path))
         if lexer:
             for index, token, text in lexer.get_tokens_unprocessed(self.contents):
                 cls = token_classes.get(token)

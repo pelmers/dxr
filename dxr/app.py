@@ -1,6 +1,6 @@
 from cStringIO import StringIO
 from functools import partial
-from itertools import chain
+from itertools import chain, izip
 from logging import StreamHandler
 import os
 from os import chdir
@@ -22,13 +22,13 @@ from dxr.es import (filtered_query, frozen_config, frozen_configs,
                     es_alias_or_not_found)
 from dxr.exceptions import BadTerm
 from dxr.filters import FILE, LINE
-from dxr.lines import html_line
+from dxr.lines import html_line, finished_tags, es_lines
 from dxr.mime import icon, is_image
 from dxr.vcs import tree_to_repos
-from dxr.plugins import plugins_named
+from dxr.plugins import plugins_named, all_plugins
 from dxr.query import Query, filter_menu_items
 from dxr.utils import (non_negative_int, decode_es_datetime, DXR_BLUEPRINT,
-                       format_number)
+                       format_number, append_update, append_by_line)
 
 # Look in the 'dxr' package for static files, etc.:
 dxr_blueprint = Blueprint(DXR_BLUEPRINT,
@@ -222,6 +222,7 @@ def browse(tree, path=''):
         return _browse_folder(tree, path, config)
     except NotFound:
         # Grab the FILE doc, just for the sidebar nav links:
+        frozen = frozen_config(tree)
         files = filtered_query(
             frozen['es_alias'],
             FILE,
@@ -230,7 +231,6 @@ def browse(tree, path=''):
             include=['links'])
         if not files:
             raise NotFound
-        links = files[0].get('links', [])
 
         lines = filtered_query(
             frozen['es_alias'],
@@ -242,9 +242,11 @@ def browse(tree, path=''):
         return _browse_file(tree,
                             path,
                             config,
+                            '\n'.join((d['content'][0] for d in lines)),
                             lines,
-                            links,
-                            frozen_config(tree)['generated_date'])
+                            files,
+                            frozen['generated_date'],
+                            frozen)
 
 
 def _browse_folder(tree, path, config):
@@ -296,8 +298,23 @@ def _browse_folder(tree, path, config):
              f.get('is_binary', [False])[0])
             for f in files_and_folders])
 
+def skim_file(skimmers, contents):
+    """
+    Skim contents with all the skimmers, returning the things we need to make a
+    template.
+    """
+    num_lines = len(contents.splitlines())
+    linkses, refses, regionses = [], [], []
+    annotations_by_line = [[] for _ in xrange(num_lines)]
+    for file_to_skim in skimmers:
+        if file_to_skim.is_interesting():
+            linkses.extend(file_to_skim.links())
+            refses.append(file_to_skim.refs())
+            regionses.append(file_to_skim.regions())
+            append_by_line(annotations_by_line, file_to_skim.annotations_by_line())
+    return linkses, refses, regionses, annotations_by_line
 
-def _browse_file(tree, path, config, lines, links, generated_date):
+def _browse_file(tree, path, config, contents, lines, files, generated_date, frozen):
     """Return a rendered page displaying a source file.
 
     If there is no such file, raise NotFound.
@@ -312,6 +329,7 @@ def _browse_file(tree, path, config, lines, links, generated_date):
         # Sort by order, resolving ties by section name:
         return sorted(sections, key=lambda section: (section['order'],
                                                      section['heading']))
+    links = files[0].get('links', [])
     # Common template variables:
     common = {
         'www_root': config.www_root,
@@ -324,7 +342,7 @@ def _browse_file(tree, path, config, lines, links, generated_date):
         'generated_date': generated_date,
         'google_analytics_key': config.google_analytics_key,
         'filters': filter_menu_items(
-            plugins_named(frozen_config(tree)['enabled_plugins'])),
+            plugins_named(frozen['enabled_plugins'])),
     }
 
     # File template variables
@@ -340,22 +358,45 @@ def _browse_file(tree, path, config, lines, links, generated_date):
             'image_file.html',
             **merge(common, file_vars))
     else:  # For now, we don't index binary files, so this is always a text one
-        # TODO: run file skimmers at this point
+        # Construct skimmer objects for all enabled plugins that define a
+        # file_to_skim class.
+        skimmers = [plugin.file_to_skim(path, contents, name,
+            config.trees[tree], files, lines) for name, plugin in
+            all_plugins().items() if name in frozen['enabled_plugins'] and
+            plugin.file_to_skim]
+        linkses, refses, regionses, annotations = skim_file(skimmers, contents)
+        # Pull pre-existing refs and regions from ES, presumably from an
+        # earlier indexing run.
+        es_refses = (doc.get('refs', []) for doc in lines)
+        es_regionses = (doc.get('regionses', []) for doc in lines)
+        # Here we combine together the refs and regions we just skimmed and
+        # those we pulled from the indexing run.
+        lines_tags = es_lines(finished_tags(contents,
+                                          chain(chain.from_iterable(refses),
+                                              chain.from_iterable(es_refses)),
+                                          chain(chain.from_iterable(regionses),
+                                              chain.from_iterable(regionses))))
+        # Give each line a tags prop that contains the combined refs and
+        # regions from skimming and indexing, and extend the annotations with
+        # those from skimming.
+        for doc, skim_annotation, line_tag in izip(lines, annotations, lines_tags):
+            doc['tags'] = line_tag
+            doc['annotations'] = doc.get('annotations', []) + skim_annotation
+        links.extend(linkses)
         return render_template(
             'text_file.html',
             **merge(common, file_vars, {
                 # Someday, it would be great to stream this and not concretize
                 # the whole thing in RAM. The template will have to quit
                 # looping through the whole thing 3 times.
-                'lines': [(html_line(doc['content'][0], doc.get('tags', [])),
-                           doc.get('annotations', [])) for doc in lines],
+                'lines': [(html_line(doc['content'][0], doc['tags']),
+                           doc['annotations']) for doc in lines],
                 'is_text': True,
                 'sections': sidebar_links(links)}))
 
 @dxr_blueprint.route('/<tree>/rev/<revision>/<path:path>')
 def permalink(tree, revision, path):
-    # TODO notes:
-    # run filetoskims on the file contents
+    """Show a page for path at specific revision by querying version control."""
     contents = None
     config = current_app.dxr_config
     for vcs in current_app.vcs_repositories[tree].values():
@@ -368,9 +409,11 @@ def permalink(tree, revision, path):
     return _browse_file(tree,
                         path,
                         config,
+                        contents,
                         [{'content': [line]} for line in contents.split('\n')],
-                        [],
-                        datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000"))
+                        [{}],
+                        datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000"),
+                        frozen_config(tree))
 
 
 def _linked_pathname(path, tree_name):
