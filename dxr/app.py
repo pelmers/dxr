@@ -22,7 +22,9 @@ from dxr.es import (filtered_query, frozen_config, frozen_configs,
                     es_alias_or_not_found)
 from dxr.exceptions import BadTerm
 from dxr.filters import FILE, LINE
-from dxr.lines import html_line, finished_tags, es_lines, undo_es_lines_refs, undo_es_lines_regions, tags_per_line
+from dxr.lines import (html_line, finished_tags, es_lines,
+                       triples_from_es_refs, triples_from_es_regions,
+                       tags_per_line, reconstitute_contents)
 from dxr.mime import icon, is_image
 from dxr.vcs import tree_to_repos
 from dxr.plugins import plugins_named, all_plugins
@@ -239,10 +241,13 @@ def browse(tree, path=''):
             sort=['number'],
             size=1000000,
             include=['content', 'refs', 'regions', 'annotations', 'offset'])
+        # Deref content and offset from lines.
+        for doc in lines:
+            doc['content'] = doc['content'][0]
+            doc['offset'] = doc['offset'][0]
         return _browse_file(tree,
                             path,
                             config,
-                            '\n'.join((d['content'][0] for d in lines)),
                             lines,
                             files,
                             frozen['generated_date'],
@@ -298,12 +303,12 @@ def _browse_folder(tree, path, config):
              f.get('is_binary', [False])[0])
             for f in files_and_folders])
 
-def skim_file(skimmers, contents):
+def skim_file(skimmers, num_lines):
     """
     Skim contents with all the skimmers, returning the things we need to make a
     template.
+    Compare to dxr.build.index_file
     """
-    num_lines = len(contents.splitlines())
     linkses, refses, regionses = [], [], []
     annotations_by_line = [[] for _ in xrange(num_lines)]
     for file_to_skim in skimmers:
@@ -314,10 +319,13 @@ def skim_file(skimmers, contents):
             append_by_line(annotations_by_line, file_to_skim.annotations_by_line())
     return linkses, refses, regionses, annotations_by_line
 
-def _browse_file(tree, path, config, contents, lines, files, generated_date, frozen):
+def _browse_file(tree, path, config, lines, file_properties, generated_date, frozen):
     """Return a rendered page displaying a source file.
 
     If there is no such file, raise NotFound.
+
+    :arg lines: list of dictionaries in the form {content, annotations,
+            offset, refs, regions}
 
     """
     def sidebar_links(sections):
@@ -329,7 +337,10 @@ def _browse_file(tree, path, config, contents, lines, files, generated_date, fro
         # Sort by order, resolving ties by section name:
         return sorted(sections, key=lambda section: (section['order'],
                                                      section['heading']))
-    links = files[0].get('links', [])
+    links = file_properties[0].get('links', [])
+    line_contents = [doc['content'] for doc in lines]
+    offsets = [doc['offset'] for doc in lines]
+    contents = reconstitute_contents(zip(line_contents, offsets))
     # Common template variables:
     common = {
         'www_root': config.www_root,
@@ -358,47 +369,40 @@ def _browse_file(tree, path, config, contents, lines, files, generated_date, fro
             'image_file.html',
             **merge(common, file_vars))
     else:  # For now, we don't index binary files, so this is always a text one
-
         # Construct skimmer objects for all enabled plugins that define a
         # file_to_skim class.
         skimmers = [plugin.file_to_skim(path, contents, name,
-                    config.trees[tree], files, lines) for name, plugin in
+                    config.trees[tree], file_properties, lines) for name, plugin in
                     all_plugins().items() if name in frozen['enabled_plugins'] and
                     plugin.file_to_skim]
-        linkses, refses, regionses, annotationses = skim_file(skimmers, contents)
+        linkses, refses, regionses, annotationses = skim_file(skimmers, len(lines))
         # Pull pre-existing refs and regions from ES, presumably from an
         # earlier indexing run.
-        # TODO: actually implement refs and regions in the LINE schema.
-        es_refs = undo_es_lines_refs([doc.get('refs', []) for doc in lines])
-        es_regions = undo_es_lines_regions([doc.get('regions', []) for doc in lines])
-        #from pprint import pprint
-        #pprint(list(es_refses))
-        #pprint(list(es_regionses))
+        es_refs = triples_from_es_refs(doc.get('refs', []) for doc in lines)
+        es_regions = triples_from_es_regions(doc.get('regions', []) for doc in lines)
         # Here we combine together the refs and regions we just skimmed and
         # those we pulled from the indexing run.
-        tags = finished_tags(contents,
+        tags = finished_tags(offsets,
                              chain(chain.from_iterable(refses),
                                    es_refs),
                              chain(chain.from_iterable(regionses),
                                    es_regions))
-        # Give each line a tags prop that contains the combined refs and
-        # regions from skimming and indexing, and extend the annotations with
-        # those from skimming.
-        for (doc, tags_in_line, skim_annotation) in izip(lines,
-                                                          tags_per_line(tags),
-                                                          annotationses):
-            doc['tags'] = tags_in_line
-            doc['annotations'] = doc.get('annotations', []) + skim_annotation
-        links.extend(linkses)
+        # Combine refs and regions from skimming and indexing, and extend the
+        # annotations with those from skimming.
         #import pdb; pdb.set_trace()
+        links.extend(linkses)
         return render_template(
             'text_file.html',
             **merge(common, file_vars, {
                 # Someday, it would be great to stream this and not concretize
                 # the whole thing in RAM. The template will have to quit
                 # looping through the whole thing 3 times.
-                'lines': [(html_line(doc['content'][0], doc['tags'], doc['offset'][0]),
-                           doc['annotations']) for doc in lines],
+                'lines': [(html_line(doc['content'], tags_in_line, doc['offset']),
+                           doc.get('annotations', []) + skim_annotations)
+                                for doc, tags_in_line, skim_annotations in
+                                   izip(lines,
+                                        tags_per_line(tags),
+                                        annotationses)],
                 'is_text': True,
                 'sections': sidebar_links(links)}))
 
@@ -417,8 +421,8 @@ def permalink(tree, revision, path):
     return _browse_file(tree,
                         path,
                         config,
-                        contents,
-                        [{'content': [line]} for line in contents.split('\n')],
+                        [{'content': line, 'offset': offset} for (line, offset)
+                            in lines_and_offsets(contents)],
                         [{}],
                         datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000"),
                         frozen_config(tree))

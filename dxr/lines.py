@@ -216,19 +216,19 @@ def tag_boundaries(refs, regions):
                 yield end, False, tag
 
 
-def line_boundaries(text):
+def line_boundaries(line_offsets):
     """Return a tag for the end of each line in a string.
 
-    :arg text: Unicode
+    :arg line_offsets: list of offsets of the start of each line from the start
+    of the file
 
     Endpoints and start points are coincident: right after a (universal)
     newline.
 
     """
-    up_to = 0
-    for line in text.splitlines(True):
-        up_to += len(line)
-        yield up_to, False, LINE
+    for offset in line_offsets:
+        yield offset, False, LINE
+        yield offset, True, LINE
 
 
 def non_overlapping_refs(tags):
@@ -314,7 +314,7 @@ def nesting_order((point, is_start, payload)):
     return point, is_start, (payload.sort_order if is_start else
                              -payload.sort_order)
 
-def finished_tags(text, refs, regions):
+def finished_tags(line_offsets, refs, regions):
     """Return an ordered iterable of properly nested tags which fully describe
     the refs and regions and their places in a file's text.
 
@@ -324,10 +324,11 @@ def finished_tags(text, refs, regions):
     """
     # Plugins return unicode offsets, not byte ones.
 
+    #import pdb; pdb.set_trace()
     # Get start and endpoints of intervals:
     tags = list(tag_boundaries(refs, regions))
 
-    tags.extend(line_boundaries(text))
+    tags.extend(line_boundaries(line_offsets))
 
     # Sorting is actually not a significant use of time in an actual indexing
     # run.
@@ -346,7 +347,7 @@ def tags_per_line(flat_tags):
     for t in flat_tags:
         point, is_start, payload = t
         if payload is LINE:
-            if not is_start:
+            if is_start:
                 yield tags
                 tags = []
         else:
@@ -381,7 +382,7 @@ def es_lines(tags):
     # tags always ends with a LINE closer, so we don't need any additional
     # yield here to catch remnants.
 
-def undo_es_lines_refs(es_refs):
+def triples_from_es_refs(es_refs):
     """
     Undo list of lists of es refs per lines back to (start, end, payload) triples.
     """
@@ -390,11 +391,11 @@ def undo_es_lines_refs(es_refs):
             ref = (item['payload']['menuitems'], item['payload'].get('hover'))
             yield (item['start'], item['end'], ref)
 
-def undo_es_lines_regions(es_regions):
+def triples_from_es_regions(es_regions):
     """
     Undo list of lists es regions back to (start, end, payload) triples.
     """
-    # TODO: refactor with undo_es_lines_refs
+    # TODO: refactor with triples_from_es_regions
     for line in es_regions:
         for item in line:
             #import pdb; pdb.set_trace()
@@ -433,3 +434,40 @@ def html_line(text, tags, bof_offset):
         yield text[up_to:]
 
     return Markup(u''.join(segments(text, tags)))
+
+def lines_and_offsets(contents):
+    """
+    Yield (line, bof_offset) for each line in contents, where line keeps its
+    ending newline.
+    """
+    lines = contents.splitlines(True)
+    chars = 0
+    for line in lines:
+        yield line, chars
+        chars += len(line)
+
+def reconstitute_contents(lines_and_offsets):
+    """
+    Return a reconstituted contents from the lines, where line endings are
+    guessed based on offsets. Reconstituted contents will not end with a new
+    line.
+
+    :arg iterable lines_offsets: Tuples (line, offset), where line does not
+        have ending newline and offset is the byte position of the start of the
+        line from BOF.
+    """
+    def lines_with_newlines():
+        # Track the previous offset. len(reconstituted line) = next_offset - its_offset
+        previous_offset = previous_line = None
+        for line, offset in lines_and_offsets:
+            if previous_line is not None:
+                length_with_newline = offset - previous_offset
+                length_of_newline = length_with_newline - len(previous_line)
+                yield previous_line + '\n' if length_of_newline == 1 else '\r\n'
+            previous_offset = offset
+            previous_line = line
+        # We check here in case the file is empty.
+        if previous_line is not None:
+            yield line
+
+    return ''.join(lines_with_newlines())

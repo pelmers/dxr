@@ -137,11 +137,15 @@ class Mercurial(VCS):
     def generate_raw(self, path):
         return self.upstream + 'raw-file/' + self.revision + '/' + path
 
+from profilehooks import profile
 class Git(VCS):
+    #TODO: freaking slowwwwwwwwwwwwwwwwwwwww
+    #@profile
     def __init__(self, root):
         super(Git, self).__init__(root)
-        self.untracked_files = set(line for line in
-            self.invoke_vcs(['git', 'ls-files', '-o']).split('\n')[:-1])
+        self.invoke_vcs(['git', 'ls-files', '-o'])
+        #self.untracked_files = set(line for line in
+        #    self.invoke_vcs(['git', 'ls-files', '-o']).split('\n')[:-1])
         self.revision = self.invoke_vcs(['git', 'rev-parse', 'HEAD'])
         source_urls = self.invoke_vcs(['git', 'remote', '-v']).split('\n')
         for src_url in source_urls:
@@ -247,7 +251,7 @@ class Perforce(VCS):
         info = self.have[path]
         return self.upstream + info['depotFile'] + '?ac=98&rev1=' + info['haveRev']
 
-every_vcs = [Mercurial, Git, Perforce]
+every_vcs = []#[Mercurial, Git, Perforce]
 
 def tree_to_repos(tree):
     """

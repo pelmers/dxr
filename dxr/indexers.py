@@ -6,7 +6,8 @@ from os.path import join
 from warnings import warn
 
 from funcy import group_by, decorator, imapcat
-from os.path import join
+
+from dxr.lines import lines_and_offsets
 
 
 STRING_PROPERTY = {
@@ -307,12 +308,8 @@ class FileToSkim(PluginConfig):
             if not self.contains_text():
                 raise ValueError("Can't get line offsets for a file that isn't"
                                  " text.")
-            lines = self.contents.splitlines(True)
-            self._line_offset_list = []
-            chars = 0
-            for i in xrange(0, len(lines)):
-                self._line_offset_list.append(chars)
-                chars += len(lines[i])
+            self._line_offset_list = [bof_offset for (text, bof_offset) in
+                                      lines_and_offsets(self.contents)]
         return self._line_offset_list
 
 

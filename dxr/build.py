@@ -30,7 +30,7 @@ from dxr.config import FORMAT
 from dxr.es import UNINDEXED_STRING, TREE
 from dxr.exceptions import BuildError
 from dxr.filters import LINE, FILE
-from dxr.lines import es_lines, finished_tags
+from dxr.lines import es_lines, finished_tags, lines_and_offsets
 from dxr.mime import is_text, icon, is_image
 from dxr.query import filter_menu_items
 from dxr.utils import (open_log, deep_update, append_update,
@@ -457,7 +457,8 @@ def index_file(tree, tree_indexers, path, es, index):
     rel_path = relpath(path, tree.source_folder)
     is_text = isinstance(contents, unicode)
 
-    num_lines = len(contents.splitlines())
+    line_offsets = [offset for (line, offset) in lines_and_offsets(contents)]
+    num_lines = len(line_offsets)
     needles = {}
     linkses, refses, regionses = [], [], []
     needles_by_line = [{} for _ in xrange(num_lines)]
@@ -518,7 +519,7 @@ def index_file(tree, tree_indexers, path, es, index):
             for total, annotations_for_this_line, tags in izip(
                     needles_by_line,
                     annotations_by_line,
-                    es_lines(finished_tags(contents, chain.from_iterable(refses), chain.from_iterable(regionses)))):
+                    es_lines(finished_tags(line_offsets, chain.from_iterable(refses), chain.from_iterable(regionses)))):
                 # Duplicate the file-wide needles into this line:
                 total.update(needles)
 

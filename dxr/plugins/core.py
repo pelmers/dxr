@@ -18,6 +18,7 @@ from dxr.plugins import direct_search
 from dxr.trigrammer import (regex_grammar, SubstringTreeVisitor, NGRAM_LENGTH,
                             And, JsRegexVisitor, es_regex_filter, NoTrigrams,
                             PythonRegexVisitor)
+from dxr.lines import lines_and_offsets
 from dxr.utils import glob_to_regex
 
 
@@ -397,13 +398,10 @@ class FileToIndex(dxr.indexers.FileToIndex):
 
     def needles_by_line(self):
         """Fill out line number and content for every line."""
-        offset = 0
-        for number, text in enumerate(self.contents.splitlines(True), 1):
-            trimmed_text = text.rstrip('\r\n')
+        for number, (line, offset) in enumerate(lines_and_offsets(self.contents), 1):
             yield [('number', number),
-                   ('content', trimmed_text),
+                   ('content', line.rstrip('\r\n')),
                    ('offset', offset)]
-            offset += len(text)
 
     def is_interesting(self):
         """Core plugin puts all files in the search index."""
