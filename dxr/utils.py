@@ -13,6 +13,7 @@ from sys import stdout
 
 from flask import url_for
 
+from collections import defaultdict
 from dxr.exceptions import CommandFailure
 
 
@@ -208,6 +209,12 @@ def cd(path):
     yield
     chdir(old_dir)
 
+def bucket(things, key):
+    """Return a map of key -> list of things."""
+    ret = defaultdict(list)
+    for thing in things:
+        ret[key(thing)].append(thing)
+    return ret
 
 def rmtree_if_exists(folder):
     """Remove a folder if it exists. Otherwise, do nothing."""

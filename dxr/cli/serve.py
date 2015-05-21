@@ -36,4 +36,4 @@ def serve(config, host, workers, port, threaded):
     """
     app = make_app(config)
     app.debug = True
-    app.run(host=host, port=port, processes=workers, threaded=threaded)
+    app.run(host=host, port=port, processes=workers, threaded=threaded, use_reloader=False)

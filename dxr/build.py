@@ -34,7 +34,7 @@ from dxr.lines import es_lines, finished_tags
 from dxr.mime import is_text, icon, is_image
 from dxr.query import filter_menu_items
 from dxr.utils import (open_log, deep_update, append_update,
-                       append_update_by_line, append_by_line)
+                       append_update_by_line, append_by_line, bucket)
 
 
 def full_traceback(callable, *args, **kwargs):
@@ -514,18 +514,25 @@ def index_file(tree, tree_indexers, path, es, index):
         # Index all the lines. If it's an empty file (no lines), don't bother
         # ES. It hates empty dicts.
         if is_text and needles_by_line:
+            #position = 0
             for total, annotations_for_this_line, tags in izip(
                     needles_by_line,
                     annotations_by_line,
-                    # TODO: refactor with app.py skimmers
-                    es_lines(finished_tags(contents,
-                                           chain.from_iterable(refses),
-                                           chain.from_iterable(regionses)))):
+                    es_lines(finished_tags(contents, chain.from_iterable(refses), chain.from_iterable(regionses)))):
                 # Duplicate the file-wide needles into this line:
                 total.update(needles)
 
-                if tags:
-                    total['tags'] = tags
+                refs_and_regions = bucket(tags, lambda index_obj: "region" if
+                        isinstance(index_obj['payload'], basestring) else "ref")
+                # Split tags into refs and regions.
+                #total['pos'] = position
+                #position += len(total['content'])
+                if refs_and_regions['ref']:
+                    total['refs'] = refs_and_regions['ref']
+                    #print 'refs', refs
+                if refs_and_regions['region']:
+                    total['regions'] = refs_and_regions['region']
+                    #print 'regions', regions
                 if annotations_for_this_line:
                     total['annotations'] = annotations_for_this_line
                 yield es.index_op(total)

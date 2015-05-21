@@ -125,6 +125,11 @@ mappings = {
                 'type': 'integer'
             },
 
+            # This stores the position offset in the file where this line begins.
+            'offset': {
+                'type': 'integer'
+            },
+
             # We index content 2 ways to keep RAM use down. Naively, we should
             # be able to pull the content.trigrams_lower source out using our
             # JS regex script, but in actuality, that uses much more RAM than
@@ -157,31 +162,32 @@ mappings = {
             # An ordered array of refs, regions, and close tags on this line.
             # We might need to change this when we implement any FileToSkims
             # with regions or refs; we'll see.
-            'tags': {
+            'refs': {
                 'type': 'object',
-                'properties': {
-                    'pos': UNINDEXED_INT,
+                'start': UNINDEXED_INT,
+                'end': UNINDEXED_INT,
+                'payload': {
+                    'type': 'object',
+                    'properties': {
 
-                    # A tag has either a menu (in which case it's a ref)...
-                    'menuitems': {
-                        'type': 'object',
-                        'properties': {
-                            'html': UNINDEXED_STRING,
-                            'href': UNINDEXED_STRING,
-                            'icon': UNINDEXED_STRING
-                        }
-                    },
-                    'hover': UNINDEXED_STRING,
-
-                    # ...or a class, in which case it's a region...
-                    'class': UNINDEXED_STRING,
-
-                    # ...or it's a closer:
-                    'closer': {
-                        'type': 'boolean',  # true -> </a>, false -> </span>
-                        'index': 'no'
+                        'menuitems': {
+                            'type': 'object',
+                            'properties': {
+                                'html': UNINDEXED_STRING,
+                                'href': UNINDEXED_STRING,
+                                'icon': UNINDEXED_STRING
+                            }
+                        },
+                        'hover': UNINDEXED_STRING,
                     }
                 }
+            },
+
+            'regions': {
+                'type': 'object',
+                'start': UNINDEXED_INT,
+                'end': UNINDEXED_INT,
+                'payload': UNINDEXED_STRING,
             },
 
             'annotations': {
@@ -391,9 +397,13 @@ class FileToIndex(dxr.indexers.FileToIndex):
 
     def needles_by_line(self):
         """Fill out line number and content for every line."""
-        for number, text in enumerate(self.contents.splitlines(), 1):
+        offset = 0
+        for number, text in enumerate(self.contents.splitlines(True), 1):
+            trimmed_text = text.rstrip('\r\n')
             yield [('number', number),
-                   ('content', text)]
+                   ('content', trimmed_text),
+                   ('offset', offset)]
+            offset += len(text)
 
     def is_interesting(self):
         """Core plugin puts all files in the search index."""
