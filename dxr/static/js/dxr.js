@@ -7,7 +7,6 @@ $(function() {
     'use strict';
 
     var constants = $('#data');
-    var stateConstants = $('#state');
     var dxr = {},
         docElem = document.documentElement;
 
@@ -234,14 +233,6 @@ $(function() {
 
             didScroll = false;
 
-            // If the previousDataLimit is 0 we are on the search.html page and doQuery
-            // has not yet been called, get the previousDataLimit and resultsLineCount
-            // from the page constants.
-            if (previousDataLimit === 0) {
-                previousDataLimit = stateConstants.data('limit');
-                resultsLineCount = stateConstants.data('results-line-count');
-            }
-
             var maxScrollY = getMaxScrollY(),
                 currentScrollPos = window.scrollY,
                 threshold = window.innerHeight + 500;
@@ -386,9 +377,13 @@ $(function() {
 
     /**
      * Queries and populates the results templates with the returned data.
+     *
+     * @param {string} queryString - The url to which to send the request. By
+     * default, queryString will be constructed from the contents of the query
+     * field.
      */
-    function doQuery() {
-
+    function doQuery(queryString) {
+        queryString = queryString || buildAjaxURL(query, caseSensitiveBox.prop('checked'), limit, 0);
         function oneMoreRequest() {
             if (requestsInFlight === 0) {
                 $('#search-box').addClass('in-progress');
@@ -421,7 +416,7 @@ $(function() {
         hideBubble();
         nextRequestNumber += 1;
         oneMoreRequest();
-        $.getJSON(buildAjaxURL(query, caseSensitiveBox.prop('checked'), limit, 0), function(data) {
+        $.getJSON(queryString, function(data) {
             // New results, overwrite
             if (myRequestNumber > displayedRequestNumber) {
                 displayedRequestNumber = myRequestNumber;
@@ -553,4 +548,11 @@ $(function() {
         });
     });
 
+    // If on load of the search endpoint we have a query string then we need to
+    // load the results of the query.
+    window.addEventListener('load', function() {
+        if (/search$/.test(window.location.pathname) && window.location.search) {
+            doQuery(window.location.href);
+        }
+    });
 });
