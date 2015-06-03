@@ -383,6 +383,7 @@ $(function() {
      * field.
      */
     function doQuery(queryString) {
+        query = $.trim(queryField.val());
         queryString = queryString || buildAjaxURL(query, caseSensitiveBox.prop('checked'), limit, 0);
         function oneMoreRequest() {
             if (requestsInFlight === 0) {
@@ -400,7 +401,6 @@ $(function() {
 
         clearTimeout(historyWaiter);
 
-        query = $.trim(queryField.val());
         var myRequestNumber = nextRequestNumber,
             lineHeight = parseInt(contentContainer.css('line-height'), 10),
             limit = Math.floor((window.innerHeight / lineHeight) + 25);
