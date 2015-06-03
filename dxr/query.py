@@ -77,13 +77,14 @@ class Query(object):
     def _file_query_results(self, results, path_highlighters):
         """Return an iterable of results of a FILE-domain query."""
         for file in results:
-            yield (icon(file['path'][0]),
+            icon_for_path = 'folder' if file['is_folder'] else icon(file['path'][0])
+            yield (icon_for_path,
                    highlight(file['path'][0],
                              chain.from_iterable(
                                  h(file) for h in path_highlighters)),
                    [])
 
-    def results(self, offset=0, limit=100):
+    def results(self, offset=1, limit=100):
         """Return a count of search results and, as an iterable, the results
         themselves::
 
@@ -98,9 +99,11 @@ class Query(object):
         # list representing the filters of the name of the parallel term. We
         # will OR the elements of the inner lists and then AND those OR balls
         # together.
+        from pprint import pprint
         enabled_filters_by_name = filters_by_name(self.enabled_plugins)
         filters = [[f(term) for f in enabled_filters_by_name[term['name']]]
                    for term in self.terms]
+        pprint(filters)
         # See if we're returning lines or just files-and-folders:
         is_line_query = any(f.domain == LINE for f in
                             chain.from_iterable(filters))
@@ -111,11 +114,7 @@ class Query(object):
                             for term in filters])
         ors = [{'or': x} for x in ors]
 
-        if not is_line_query:
-            # Don't show folders yet in search results. I don't think the JS
-            # is able to handle them.
-            ors.append({'term': {'is_folder': False}})
-
+        pprint(ors)
         if ors:
             query = {
                 'filtered': {
@@ -132,6 +131,7 @@ class Query(object):
                 'match_all': {}
             }
 
+        pprint(query)
         results = self.es_search(
             {'query': query,
              'sort': ['path', 'number'] if is_line_query else ['path'],
@@ -149,6 +149,18 @@ class Query(object):
                            else self._file_query_results(results, path_highlighters)}
 
         # Test: If var-ref (or any structural query) returns 2 refs on one line, they should both get highlit.
+
+    def mixed_results(self, offset=1, limit=100):
+        """Return a mixed variety of results for the query.
+
+        If the query is not a single term, return None. Otherwise, return an
+        object { identifiers: results, lines: results, files: results } where
+        results are defined in the same way as those of 'results' from results.
+        """
+        term = self.single_term()
+        if not term:
+            return None
+
 
     def direct_result(self):
         """Return a single search result that is an exact match for the query.

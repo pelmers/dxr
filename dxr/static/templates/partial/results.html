@@ -1,5 +1,5 @@
 {% from "partial/result_lines.html" import result_lines -%}
-
+<!--TODO next: either add mixng to this template or make separate 'mixed.html' results page -->
 {% macro results_list(results, www_root, tree) -%}
   {% for result in results %}
     <tbody class="result" data-path="{{ result.path }}">

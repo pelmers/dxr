@@ -85,6 +85,9 @@ a.type {
 }
 /* End of Panel icons that are always shown */
 
+.icon-container.folder {
+    background: transparent url(/static/icons/mimetypes/folder.png) no-repeat;
+}
 .enum {
     background-image: url(/static/icons/enum.png);
 }
@@ -105,7 +108,7 @@ a.type {
 }
 /* The .c class is used in files for comments. This definition is there just to prevent overriding. */
 .icon-container.c,
-.icon.c { 
+.icon.c {
     background-image: url(/static/icons/mimetypes/c.png);
 }
 .conf {
