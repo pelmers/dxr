@@ -14,7 +14,7 @@ $(function () {
     var container = $('#line-numbers'),
         lastModifierKey = null, // use this as a sort of canary/state indicator showing the last user action
         singleLinesArray = [], //track single highlighted lines here
-        rangesArray = []; // track ranges of highlighted lines here 
+        rangesArray = []; // track ranges of highlighted lines here
 
     //sort a one dimensional array in Ascending order
     function sortAsc(a, b) {
@@ -36,7 +36,7 @@ $(function () {
             lines = [],
             rangesArray = [],
             singleLinesArray = [];
-        
+
         var multiSelected = $('.line-number.multihighlight');
         var singleSelected = $('.line-number.highlighted');
 
@@ -98,7 +98,7 @@ $(function () {
         }
         for (s = 0, r = 0; s < singleLinesArray.length || r < rangesArray.length;) {
             // if no ranges left or singleLine < range add singleLine to hash
-            // if no singleLines left or range < singleLine add range to hash 
+            // if no singleLines left or range < singleLine add range to hash
             if ((r == rangesArray.length) || (singleLinesArray[s] < rangesArray[r][0])) {
                 windowHash += singleLinesArray[s] + ',';
                 s++;
@@ -215,7 +215,7 @@ $(function () {
             }
             selectedLineNums.addClass(classToAdd);
             selectedLineCode.addClass(classToAdd);
-            
+
             //set the last used modifier key
             lastModifierKey = 'shift';
             // since all highlighed items are stripped, add one back, mark new last-selected
