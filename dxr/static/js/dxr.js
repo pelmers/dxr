@@ -220,14 +220,6 @@ $(function() {
         history.replaceState(state, '', url);
     }
 
-    /**
-     * Add an entry into the history stack whenever we do a new search.
-     */
-    function pushHistoryState(data) {
-        var searchUrl = constants.data('search') + '?' + data.query_string;
-        history.pushState({}, '', searchUrl);
-    }
-
     function infiniteScroll() {
         if (didScroll) {
 
@@ -421,7 +413,8 @@ $(function() {
             if (myRequestNumber > displayedRequestNumber) {
                 displayedRequestNumber = myRequestNumber;
                 populateResults(data, false);
-                historyWaiter = setTimeout(pushHistoryState, timeouts.history, data);
+                historyWaiter = setTimeout(history.pushState.bind(history, {}, '', queryString),
+                                           timeouts.history);
             }
 
             previousDataLimit = limit;
