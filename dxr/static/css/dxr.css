@@ -204,6 +204,10 @@ mark {
 .file tr:hover {
     background: none;
 }
+.result-separator {
+    font-weight: bold;
+    font-size: 1.3em;
+}
 .results tr,
 .file tr {
     border: 0;

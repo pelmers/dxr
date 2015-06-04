@@ -1,3 +1,14 @@
+var templateFiles = [
+    'dxr/static/templates/partial/results_container.html',
+    'dxr/static/templates/partial/result_separator.html',
+    'dxr/static/templates/partial/results.html',
+    'dxr/static/templates/partial/result_lines.html',
+    'dxr/static/templates/partial/switch_tree.html',
+    'dxr/static/templates/partial/results_header.html',
+    'dxr/static/templates/context_menu.html',
+    'dxr/static/templates/path_line.html',
+];
+
 module.exports = function(grunt) {
 
     grunt.initConfig({
@@ -20,15 +31,7 @@ module.exports = function(grunt) {
         nunjucks: {
             precompile: {
                 baseDir: 'dxr/static/templates/',
-                src: [
-                    'dxr/static/templates/partial/results_container.html',
-                    'dxr/static/templates/partial/results.html',
-                    'dxr/static/templates/partial/result_lines.html',
-                    'dxr/static/templates/partial/switch_tree.html',
-                    'dxr/static/templates/partial/results_header.html',
-                    'dxr/static/templates/context_menu.html',
-                    'dxr/static/templates/path_line.html',
-                ],
+                src: templateFiles,
                 dest: 'dxr/static/js/templates.js',
                 options: {
                     name: function(filename) {
@@ -43,15 +46,7 @@ module.exports = function(grunt) {
         },
         watch: {
             nunjucks: {
-                files: [
-                    'dxr/static/templates/partial/results_container.html',
-                    'dxr/static/templates/partial/results.html',
-                    'dxr/static/templates/partial/result_lines.html',
-                    'dxr/static/templates/partial/switch_tree.html',
-                    'dxr/static/templates/partial/results_header.html',
-                    'dxr/static/templates/context_menu.html',
-                    'dxr/static/templates/path_line.html',
-                ],
+                files: templateFiles,
                 tasks: ['nunjucks']
             }
         }

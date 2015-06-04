@@ -383,8 +383,32 @@ $(function() {
         data.www_root = dxr.wwwRoot;
         data.tree = dxr.tree;
         data.top_of_tree = dxr.wwwRoot + '/' + data.tree + '/source/';
-        // TODO next: Show identifiers, then paths, then lines, with some kind of section dividers
-        placeTemplates(data.results.lines, false);
+        data.mixed_results = data.results;
+        // Create the result container. We populate it later.
+        data.results = [];
+        contentContainer.empty().append(nunjucks.render('partial/results_container.html', data));
+        var resultsList = contentContainer.find('.results');
+        resultsLineCount = 0;
+        for (var key in data.mixed_results) {
+            if (!data.mixed_results.hasOwnProperty(key)) continue;
+            // The template iterates over a single results key, but we have
+            // several kinds of results. Do a little swapping around to make
+            // the template happy.
+            var results = data.mixed_results[key];
+            data.results = results;
+            resultsLineCount += countLines(results);
+            for (var result in results) {
+                var icon = results[result].icon;
+                var resultHead = buildResultHead(results[result].path, data.tree, icon);
+                results[result].iconClass = resultHead[0];
+                results[result].pathLine = resultHead[1];
+            }
+            if (results.length) {
+                resultsList.append(nunjucks.render('partial/result_separator.html', {key:key}));
+                resultsList.append(nunjucks.render('partial/results.html', data));
+            }
+        }
+        document.title = data.query + "- DXR Search";
     }
 
     /**

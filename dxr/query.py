@@ -84,7 +84,6 @@ class Query(object):
                                  h(file) for h in path_highlighters)),
                    [])
 
-    def results(self, offset=1, limit=100):
     def results(self, offset=0, limit=100):
         """Return a count of search results and, as an iterable, the results
         themselves::
@@ -100,11 +99,9 @@ class Query(object):
         # list representing the filters of the name of the parallel term. We
         # will OR the elements of the inner lists and then AND those OR balls
         # together.
-        from pprint import pprint
         enabled_filters_by_name = filters_by_name(self.enabled_plugins)
         filters = [[f(term) for f in enabled_filters_by_name[term['name']]]
                    for term in self.terms]
-        pprint(filters)
         # See if we're returning lines or just files-and-folders:
         is_line_query = any(f.domain == LINE for f in
                             chain.from_iterable(filters))
@@ -115,7 +112,6 @@ class Query(object):
                             for term in filters])
         ors = [{'or': x} for x in ors]
 
-        pprint(ors)
         if ors:
             query = {
                 'filtered': {
@@ -132,7 +128,6 @@ class Query(object):
                 'match_all': {}
             }
 
-        pprint(query)
         results = self.es_search(
             {'query': query,
              'sort': ['path', 'number'] if is_line_query else ['path'],
@@ -144,25 +139,24 @@ class Query(object):
 
         path_highlighters = [f.highlight_path for f in chain.from_iterable(filters)
                              if hasattr(f, 'highlight_path')]
-        return {'result_count': result_count,
-                'results': self._line_query_results(filters, results, path_highlighters)
+        return (result_count,
+                self._line_query_results(filters, results, path_highlighters)
                            if is_line_query
-                           else self._file_query_results(results, path_highlighters)}
+                           else self._file_query_results(results, path_highlighters))
 
         # Test: If var-ref (or any structural query) returns 2 refs on one line, they should both get highlit.
 
-    def mixed_results(self, offset=1, limit=100):
+    def mixed_results(self, offset=0, limit=100):
         """Return a mixed variety of results for the query.
 
         If the query is not a single term, return None. Otherwise, return an
         object { identifiers: results, lines: results, paths: results } where
         results are defined in the same way as those of 'results' from results.
         """
-        # TODO next: write tests for this stuff
+        # TODO next next: write tests for this stuff
         term = self.single_term()
         if not term:
             return None
-        term = term['arg']
         # We borrow registered "direct searchers" as identifiers and look for
         # exact matches, basically or'ing together all filters like fn-def:
         # term, fn-ref:term, impl: term, etc.
@@ -170,12 +164,41 @@ class Query(object):
         # we only keep the parents of sibling paths.
         # For lines, we perform the equivalent of text: term, which used to be
         # the normal search type.
-        # TODO next: identifiers
+        path_count, paths = Query(self.es_search, 'path:%s' % term['arg'], self.enabled_plugins, self.is_case_sensitive).results(offset, limit)
         # TODO next: filter out the paths that overlap
-        path_query = Query(self.es_search, 'path:%s' % term, self.enabled_plugins, self.is_case_sensitive)
-        line_query = Query(self.es_search, term, self.enabled_plugins, self.is_case_sensitive)
-        return {'lines': line_query.results(),
-                'paths': path_query.results()}
+        line_count, lines = Query(self.es_search, term['arg'], self.enabled_plugins, self.is_case_sensitive).results(offset, limit)
+        # TODO next: identifiers
+        # TODO refactor with direct_result
+        identifier_count, identifiers = 0, []
+        for searcher in direct_searchers(self.enabled_plugins):
+            clause = searcher(term)
+            if not clause:
+                continue
+            results = self.es_search(
+                {
+                    'query': {
+                        'filtered': {
+                            'query': {
+                                'match_all': {}
+                            },
+                            'filter': clause
+                        }
+                    },
+                    'size': limit
+                },
+                doc_type=LINE)['hits']['hits']
+            results = [r['_source'] for r in results]
+
+            # TODO: refactor these with self.results
+            enabled_filters_by_name = filters_by_name(self.enabled_plugins)
+            filters = [[f(term) for f in enabled_filters_by_name[term['name']]]
+                    for term in self.terms]
+            path_highlighters = [f.highlight_path for f in chain.from_iterable(filters)
+                                if hasattr(f, 'highlight_path')]
+            identifiers.extend(self._line_query_results(filters, results, path_highlighters))
+            identifier_count += len(results)
+        # TODO: filter out duplicated identifiers
+        return path_count + line_count + identifier_count, {'lines': lines, 'paths': paths, 'identifiers': identifiers}
 
     def direct_result(self):
         """Return a single search result that is an exact match for the query.
