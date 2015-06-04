@@ -257,6 +257,7 @@ $(function() {
                         // Update result count
                         resultsLineCount = countLines(data.results);
                         // Use the results.html partial so we do not inject the entire container again.
+                        // TODO next: decide whether to have mixed results infinite scroll (probably no)
                         populateResults(data, true);
                         // update URL with new offset
                         setHistoryState(dataOffset);
@@ -376,6 +377,17 @@ $(function() {
     }
 
     /**
+     * Populate with data. TODO next: more docstring
+     */
+    function populateMixedResults(data) {
+        data.www_root = dxr.wwwRoot;
+        data.tree = dxr.tree;
+        data.top_of_tree = dxr.wwwRoot + '/' + data.tree + '/source/';
+        // TODO next: Show identifiers, then paths, then lines, with some kind of section dividers
+        placeTemplates(data.results.lines, false);
+    }
+
+    /**
      * Queries and populates the results templates with the returned data.
      *
      * @param {string} queryString - The url to which to send the request. By
@@ -420,7 +432,11 @@ $(function() {
             // New results, overwrite
             if (myRequestNumber > displayedRequestNumber) {
                 displayedRequestNumber = myRequestNumber;
-                populateResults(data, false);
+                if (!data.is_mixed)
+                    populateResults(data, false);
+                // TODO next: decide how to do mixed results
+                else
+                    populateMixedResults(data);
                 historyWaiter = setTimeout(pushHistoryState, timeouts.history, data);
             }
 

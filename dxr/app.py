@@ -96,6 +96,7 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
     """Do a normal search, and return the results as JSON."""
     try:
         count_and_results = query.results(offset, limit)
+    # TODO next: this is a mess of codesz. omg da hax
         # Convert to dicts for ease of manipulation in JS:
         results = [{'icon': icon,
                     'path': path,
@@ -107,6 +108,7 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
     return jsonify({
         'www_root': config.www_root,
         'tree': tree,
+        'is_mixed': bool(query.single_term()),
         'results': results,
         'result_count': count_and_results['result_count'],
         'result_count_formatted': format_number(count_and_results['result_count']),

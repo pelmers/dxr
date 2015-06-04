@@ -85,6 +85,7 @@ class Query(object):
                    [])
 
     def results(self, offset=1, limit=100):
+    def results(self, offset=0, limit=100):
         """Return a count of search results and, as an iterable, the results
         themselves::
 
@@ -154,13 +155,27 @@ class Query(object):
         """Return a mixed variety of results for the query.
 
         If the query is not a single term, return None. Otherwise, return an
-        object { identifiers: results, lines: results, files: results } where
+        object { identifiers: results, lines: results, paths: results } where
         results are defined in the same way as those of 'results' from results.
         """
+        # TODO next: write tests for this stuff
         term = self.single_term()
         if not term:
             return None
-
+        term = term['arg']
+        # We borrow registered "direct searchers" as identifiers and look for
+        # exact matches, basically or'ing together all filters like fn-def:
+        # term, fn-ref:term, impl: term, etc.
+        # For paths, we perform the perform the equivalent of path: term, but
+        # we only keep the parents of sibling paths.
+        # For lines, we perform the equivalent of text: term, which used to be
+        # the normal search type.
+        # TODO next: identifiers
+        # TODO next: filter out the paths that overlap
+        path_query = Query(self.es_search, 'path:%s' % term, self.enabled_plugins, self.is_case_sensitive)
+        line_query = Query(self.es_search, term, self.enabled_plugins, self.is_case_sensitive)
+        return {'lines': line_query.results(),
+                'paths': path_query.results()}
 
     def direct_result(self):
         """Return a single search result that is an exact match for the query.
