@@ -101,7 +101,7 @@ $(function() {
      * @param {string} tree - The tree which was searched and in which this file can be found.
      * @param {string} icon - The icon string returned in the JSON payload.
      */
-    function buildResultHead(fullPath, tree, icon) {
+    function buildResultHead(fullPath, tree, icon, isBinary) {
         var pathLines = '',
             pathRoot = '/' + tree + '/source/',
             paths = fullPath.split('/'),
@@ -121,7 +121,8 @@ $(function() {
                 'display_path': paths[pathIndex],
                 'url': pathRoot + dataPath.join('/'),
                 'is_first_or_only': isFirstOrOnly,
-                'is_dir': !isLastOrOnly
+                'is_dir': !isLastOrOnly,
+                'is_binary': isBinary
             });
         }
 
@@ -243,6 +244,7 @@ $(function() {
 
                 //Resubmit query for the next set of results.
                 $.getJSON(buildAjaxURL(query, caseSensitiveBox.prop('checked'), defaultDataLimit, dataOffset), function(data) {
+                    data.query = query;
                     if (data.results.length > 0) {
                         var state = {};
 
@@ -328,7 +330,7 @@ $(function() {
 
             for (var result in results) {
                 var icon = results[result].icon;
-                var resultHead = buildResultHead(results[result].path, data.tree, icon);
+                var resultHead = buildResultHead(results[result].path, data.tree, icon, results[result].is_binary);
                 results[result].iconClass = resultHead[0];
                 results[result].pathLine = resultHead[1];
             }
@@ -363,7 +365,7 @@ $(function() {
         }
 
         if (!append) {
-            document.title = data.query + "- DXR Search";
+            document.title = data.query + " - DXR Search";
         }
     }
 
@@ -409,6 +411,7 @@ $(function() {
         nextRequestNumber += 1;
         oneMoreRequest();
         $.getJSON(queryString, function(data) {
+            data.query = query;
             // New results, overwrite
             if (myRequestNumber > displayedRequestNumber) {
                 displayedRequestNumber = myRequestNumber;
