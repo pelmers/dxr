@@ -146,13 +146,33 @@ class Query(object):
 
         path_highlighters = [f.highlight_path for f in chain.from_iterable(filters)
                              if hasattr(f, 'highlight_path')]
-        return {'result_count': result_count,
-                'results': self._line_query_results(filters, results, path_highlighters)
-                           if is_line_query
-                           else self._file_query_results(results, path_highlighters)}
+        if is_line_query:
+            results = self._line_query_results(filters, results, path_highlighters)
+        else:
+            results = self._file_query_results(results, path_highlighters)
+        return result_count, results
 
         # Test: If var-ref (or any structural query) returns 2 refs on one line, they should both get highlit.
 
+    def mixed_results(self, limit=100, mixing_limit=10):
+        """Return a mixed variety of results for the query."""
+
+        # TODO next next: write tests for this stuff
+        term = self.single_term()
+        if not term:
+            return None, None
+
+        # Group together path: term, id: term, and regular term searches.
+        path_count, paths = Query(self.es_search, 'path:%s' % term['arg'], self.enabled_plugins,
+                                  self.is_case_sensitive).results(0, mixing_limit)
+        _, ids = Query(self.es_search, 'id:%s' % term['arg'], self.enabled_plugins,
+                       self.is_case_sensitive).results(0, mixing_limit)
+        line_count, lines = self.results(0, limit)
+        # TODO next: If any lines are already in identifiers, remove them.
+        # We don't add the id count because line count will include it.
+        return path_count + line_count, chain(paths, ids, lines)
+
+    # TODO next: consider how to replace this by mixed_results
     def direct_result(self):
         """Return a single search result that is an exact match for the query.
 

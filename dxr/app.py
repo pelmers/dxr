@@ -101,14 +101,19 @@ def search(tree):
 
 def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, config):
     """Do a normal search, and return the results as JSON."""
-    try:
-        count_and_results = query.results(offset, limit)
+    def results_to_json(es_results):
         # Convert to dicts for ease of manipulation in JS:
-        results = [{'icon': icon,
-                    'path': path,
-                    'lines': [{'line_number': nb, 'line': l} for nb, l in lines],
-                    'is_binary': is_binary}
-                   for icon, path, lines, is_binary in count_and_results['results']]
+        return [{'icon': line_icon,
+                 'path': path,
+                 'lines': [{'line_number': nb, 'line': l} for nb, l in lines],
+                 'is_binary': is_binary}
+                for line_icon, path, lines, is_binary in es_results]
+    try:
+        if query.single_term() and offset == 0:
+            count, results = query.mixed_results(limit)
+        else:
+            count, results = query.results(offset, limit)
+        results = results_to_json(results)
     except BadTerm as exc:
         return jsonify({'error_html': exc.reason, 'error_level': 'warning'}), 400
 
@@ -116,8 +121,8 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
         'www_root': config.www_root,
         'tree': tree,
         'results': results,
-        'result_count': count_and_results['result_count'],
-        'result_count_formatted': format_number(count_and_results['result_count']),
+        'result_count': count,
+        'result_count_formatted': format_number(count),
         'tree_tuples': _tree_tuples(query_text, is_case_sensitive)})
 
 
