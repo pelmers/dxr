@@ -149,6 +149,7 @@ class Query(object):
         if is_line_query:
             results = self._line_query_results(filters, results, path_highlighters)
         else:
+            # TODO next: path highlighting
             results = self._file_query_results(results, path_highlighters)
         return result_count, results
 

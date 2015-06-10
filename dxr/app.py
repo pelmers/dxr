@@ -117,6 +117,7 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
     except BadTerm as exc:
         return jsonify({'error_html': exc.reason, 'error_level': 'warning'}), 400
 
+    # TODO next: consider including 'num_mixed' to highlight in the view
     return jsonify({
         'www_root': config.www_root,
         'tree': tree,
