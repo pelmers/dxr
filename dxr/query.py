@@ -149,7 +149,7 @@ class Query(object):
 
         # Test: If var-ref (or any structural query) returns 2 refs on one line, they should both get highlit.
 
-    def mixed_results(self, limit=100, mixing_limit=10):
+    def mixed_results(self, limit=100, mixing_limit=5):
         """Return a mixed variety of results for the query."""
 
         # TODO next next: write tests for this stuff
@@ -158,22 +158,24 @@ class Query(object):
             return None, None
 
         # Group together path: term, id: term, and regular term searches.
-        path_count, paths = Query(self.es_search, 'path:%s' % term['arg'], self.enabled_plugins,
-                                  self.is_case_sensitive).results(0, mixing_limit)
         _, ids = Query(self.es_search, 'id:%s' % term['arg'], self.enabled_plugins,
                        self.is_case_sensitive).results(0, mixing_limit)
+        # Concretize because we will want to count and also return.
+        ids = list(ids)
+        path_count, paths = Query(self.es_search, 'path:%s' % term['arg'], self.enabled_plugins,
+                                  self.is_case_sensitive).results(0, mixing_limit - len(ids))
+        paths = list(paths)
         line_count, lines = self.results(0, limit)
-        # Concretize because we will want to count and do some filtering.
-        paths, ids, lines = list(paths), list(ids), list(lines)
+        # TODO: consider uncommenting this part
         # Set of (path, line) tuples we find in ids
-        seen_lines = set((path, line_no) for _, path, texts, _ in ids for line_no, _ in texts)
-        # Filter lines based on seen_lines
-        lines = filter(lambda (icon, path, texts, _): texts,
-                       ((icon, path, [(line_no, text) for line_no, text in texts if
-                                      (path, line_no) not in seen_lines], is_binary) for
-                        icon, path, texts, is_binary in lines))
+        #seen_lines = set((path, line_no) for _, path, texts, _ in ids for line_no, _ in texts)
+        ## Filter lines based on seen_lines
+        #lines = filter(lambda (icon, path, texts, _): texts,
+        #               ((icon, path, [(line_no, text) for line_no, text in texts if
+        #                              (path, line_no) not in seen_lines], is_binary) for
+        #                icon, path, texts, is_binary in lines))
         # We don't add the id count because line count would include it.
-        return path_count + line_count, chain(ids, paths, lines), len(paths) + len(ids)
+        return path_count + line_count, lines, list(chain(ids, paths))
 
     # TODO next: consider how to replace this by mixed_results
     def direct_result(self):

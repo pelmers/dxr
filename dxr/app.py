@@ -3,22 +3,18 @@ from datetime import datetime
 from functools import partial
 from itertools import chain, izip
 from logging import StreamHandler
-import os
-from os import chdir
-from os.path import join, basename, split, dirname, relpath
-from sys import stderr
-from time import time
 from mimetypes import guess_type
-from urllib import quote_plus
+import os
+from os.path import join, basename, split, relpath
+from sys import stderr
 
-from flask import (Blueprint, Flask, send_from_directory, current_app,
+from flask import (Blueprint, Flask, current_app,
                    send_file, request, redirect, jsonify, render_template,
                    url_for)
 from funcy import merge, imap
 from pyelasticsearch import ElasticSearch
 from werkzeug.exceptions import NotFound
 
-from dxr.config import Config
 from dxr.es import (filtered_query, frozen_config, frozen_configs,
                     es_alias_or_not_found)
 from dxr.exceptions import BadTerm
@@ -29,8 +25,9 @@ from dxr.mime import icon, is_image, is_text
 from dxr.plugins import plugins_named, all_plugins
 from dxr.query import Query, filter_menu_items
 from dxr.utils import (non_negative_int, decode_es_datetime, DXR_BLUEPRINT,
-                       format_number, append_update, append_by_line, cumulative_sum)
+                       format_number, append_by_line, cumulative_sum)
 from dxr.vcs import VcsCache
+
 
 # Look in the 'dxr' package for static files, etc.:
 dxr_blueprint = Blueprint(DXR_BLUEPRINT,
@@ -110,10 +107,10 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
                 for line_icon, path, lines, is_binary in es_results]
     try:
         if query.single_term() and offset == 0:
-            count, results, num_mixed = query.mixed_results(limit)
+            count, results, mixed = query.mixed_results(limit)
         else:
             count, results = query.results(offset, limit)
-            num_mixed = 0
+            mixed = []
         results = results_to_json(results)
     except BadTerm as exc:
         return jsonify({'error_html': exc.reason, 'error_level': 'warning'}), 400
@@ -122,7 +119,7 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
         'www_root': config.www_root,
         'tree': tree,
         'results': results,
-        'num_mixed': num_mixed,
+        'mixed': mixed,
         'result_count': count,
         'result_count_formatted': format_number(count),
         'tree_tuples': _tree_tuples(query_text, is_case_sensitive)})

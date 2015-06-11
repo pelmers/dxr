@@ -151,8 +151,7 @@ $(function() {
         return [iconClass, pathLines];
     }
 
-    var searchForm = $('#basic_search'),
-        queryField = $('#query'),
+    var queryField = $('#query'),
         query = null,
         caseSensitiveBox = $('#case'),
         contentContainer = $('#content'),
@@ -331,6 +330,7 @@ $(function() {
      * @param {bool} append - Should the content be appended or overwrite
      */
     function populateResults(data, append) {
+        // TODO next: look at http://picpaste.com/pics/promoted_results-cyMa3FjS.1434054796.png
         data.www_root = dxr.wwwRoot;
         data.tree = dxr.tree;
         data.top_of_tree = dxr.wwwRoot + '/' + data.tree + '/source/';
@@ -355,7 +355,6 @@ $(function() {
                 var resultHead = buildResultHead(results[i].path, data.tree, icon, results[i].is_binary);
                 results[i].iconClass = resultHead[0];
                 results[i].pathLine = resultHead[1];
-                results[i].is_mixed = i < data.num_mixed;
             }
 
             if (!append) {
