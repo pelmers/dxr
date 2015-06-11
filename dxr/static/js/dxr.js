@@ -100,11 +100,33 @@ $(function() {
      * @param {string} fullPath - The full path of the currently displayed file.
      * @param {string} tree - The tree which was searched and in which this file can be found.
      * @param {string} icon - The icon string returned in the JSON payload.
+     * @param {boolean} isBinary - Whether the result is for a binary file.
      */
     function buildResultHead(fullPath, tree, icon, isBinary) {
+        function rejoinMarkup(splitOnSlash, tag) {
+            // Rejoin consecutive elements of splitOnSlash if they were split on </tag>.
+            var newSplits = [],
+                i = 0;
+            while (i < splitOnSlash.length - 1) {
+                var current = splitOnSlash[i],
+                    next = splitOnSlash[i + 1];
+                if (current.lastIndexOf("<") === current.length - 1 && next.indexOf(tag + ">") === 0) {
+                    newSplits.push([current, next].join("/"));
+                    i++;
+                } else {
+                    newSplits.push(current);
+                }
+                i++;
+            }
+            if (i < splitOnSlash.length)
+                newSplits.push(splitOnSlash[splitOnSlash.length - 1]);
+            return newSplits;
+        }
         var pathLines = '',
             pathRoot = '/' + tree + '/source/',
-            paths = fullPath.split('/'),
+            unhighlightedPath = fullPath.replace(/<\/?b>/g, ""),
+            paths = unhighlightedPath.split('/'),
+            displayPaths = rejoinMarkup(fullPath.split('/'), "b"),
             splitPathLength = paths.length,
             dataPath = [],
             iconClass = icon.substring(icon.indexOf('/') + 1);
@@ -118,7 +140,7 @@ $(function() {
 
             pathLines += nunjucks.render('path_line.html', {
                 'data_path': dataPath.join('/'),
-                'display_path': paths[pathIndex],
+                'display_path': displayPaths[pathIndex],
                 'url': pathRoot + dataPath.join('/'),
                 'is_first_or_only': isFirstOrOnly,
                 'is_dir': !isLastOrOnly,
@@ -328,11 +350,12 @@ $(function() {
             var results = data.results;
             resultsLineCount = countLines(results);
 
-            for (var result in results) {
-                var icon = results[result].icon;
-                var resultHead = buildResultHead(results[result].path, data.tree, icon, results[result].is_binary);
-                results[result].iconClass = resultHead[0];
-                results[result].pathLine = resultHead[1];
+            for (var i = 0; i < results.length; i++) {
+                var icon = results[i].icon;
+                var resultHead = buildResultHead(results[i].path, data.tree, icon, results[i].is_binary);
+                results[i].iconClass = resultHead[0];
+                results[i].pathLine = resultHead[1];
+                results[i].is_mixed = i < data.num_mixed;
             }
 
             if (!append) {

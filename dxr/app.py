@@ -110,18 +110,19 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
                 for line_icon, path, lines, is_binary in es_results]
     try:
         if query.single_term() and offset == 0:
-            count, results = query.mixed_results(limit)
+            count, results, num_mixed = query.mixed_results(limit)
         else:
             count, results = query.results(offset, limit)
+            num_mixed = 0
         results = results_to_json(results)
     except BadTerm as exc:
         return jsonify({'error_html': exc.reason, 'error_level': 'warning'}), 400
 
-    # TODO next: consider including 'num_mixed' to highlight in the view
     return jsonify({
         'www_root': config.www_root,
         'tree': tree,
         'results': results,
+        'num_mixed': num_mixed,
         'result_count': count,
         'result_count_formatted': format_number(count),
         'tree_tuples': _tree_tuples(query_text, is_case_sensitive)})

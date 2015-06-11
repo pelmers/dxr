@@ -78,7 +78,7 @@ class Query(object):
     def _file_query_results(self, results, path_highlighters):
         """Return an iterable of results of a FILE-domain query."""
         for file in results:
-            yield (icon(file['path'][0]),
+            yield ('folder' if file['is_folder'] else icon(file['path'][0]),
                    highlight(file['path'][0],
                              chain.from_iterable(
                                  h(file) for h in path_highlighters)),
@@ -114,11 +114,6 @@ class Query(object):
                             for term in filters])
         ors = [{'or': x} for x in ors]
 
-        if not is_line_query:
-            # Don't show folders yet in search results. I don't think the JS
-            # is able to handle them.
-            ors.append({'term': {'is_folder': False}})
-
         if ors:
             query = {
                 'filtered': {
@@ -149,7 +144,6 @@ class Query(object):
         if is_line_query:
             results = self._line_query_results(filters, results, path_highlighters)
         else:
-            # TODO next: path highlighting
             results = self._file_query_results(results, path_highlighters)
         return result_count, results
 
@@ -169,9 +163,17 @@ class Query(object):
         _, ids = Query(self.es_search, 'id:%s' % term['arg'], self.enabled_plugins,
                        self.is_case_sensitive).results(0, mixing_limit)
         line_count, lines = self.results(0, limit)
-        # TODO next: If any lines are already in identifiers, remove them.
-        # We don't add the id count because line count will include it.
-        return path_count + line_count, chain(paths, ids, lines)
+        # Concretize because we will want to count and do some filtering.
+        paths, ids, lines = list(paths), list(ids), list(lines)
+        # Set of (path, line) tuples we find in ids
+        seen_lines = set((path, line_no) for _, path, texts, _ in ids for line_no, _ in texts)
+        # Filter lines based on seen_lines
+        lines = filter(lambda (icon, path, texts, _): texts,
+                       ((icon, path, [(line_no, text) for line_no, text in texts if
+                                      (path, line_no) not in seen_lines], is_binary) for
+                        icon, path, texts, is_binary in lines))
+        # We don't add the id count because line count would include it.
+        return path_count + line_count, chain(ids, paths, lines), len(paths) + len(ids)
 
     # TODO next: consider how to replace this by mixed_results
     def direct_result(self):

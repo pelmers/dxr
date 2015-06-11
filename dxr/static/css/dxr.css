@@ -159,6 +159,12 @@ tr.binary_row > td {
 tr.binary_row {
     opacity: 0.6;
 }
+tbody.mixed_result td {
+    padding-bottom: .5em;
+}
+tbody.mixed_result {
+    background: rgb(245, 245, 220);
+}
 .highlighted,
 .multihighlight {
     background: none repeat scroll 0 0 rgb(255, 255, 204);
