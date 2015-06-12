@@ -1,6 +1,7 @@
 import cgi
 from itertools import chain, groupby
 from operator import itemgetter
+
 import re
 
 from parsimonious import Grammar, NodeVisitor
@@ -85,16 +86,25 @@ class Query(object):
                    [],
                    file.get('is_binary', False))
 
-    def results(self, offset=0, limit=100):
-        """Return a count of search results and, as an iterable, the results
-        themselves::
+    def _dedup_lines_results(self, ids, lines):
+        """Return a new copy of lines where results duplicated in ids are removed."""
+        # Set of (path, line) tuples we find in ids
+        seen_lines = set((path, line_no) for _, path, texts, _ in ids for line_no, _ in texts)
+        # Filter lines based on seen_lines
+        return filter(lambda (icon, path, texts, _): texts,
+                      ((icon, path, [(line_no, text) for line_no, text in texts if
+                                     (path, line_no) not in seen_lines], is_binary) for
+                       icon, path, texts, is_binary in lines))
 
-            {'result_count': 12,
-             'results': [(icon,
-                          path within tree,
-                          [(line_number, highlighted_line_of_code), ...],
-                          whether it is binary),
-                         ...]}
+    def results(self, offset=0, limit=100):
+        """Return a tuple of (total number of results, search results, promoted results),
+        where results have the form:
+
+             [(icon,
+              path within tree,
+              [(line_number, highlighted_line_of_code), ...],
+              whether it is binary),
+             ...]
 
         """
         # Instantiate applicable filters, yielding a list of lists, each inner
@@ -141,48 +151,43 @@ class Query(object):
 
         path_highlighters = [f.highlight_path for f in chain.from_iterable(filters)
                              if hasattr(f, 'highlight_path')]
+
         if is_line_query:
             results = self._line_query_results(filters, results, path_highlighters)
         else:
             results = self._file_query_results(results, path_highlighters)
-        return result_count, results
+
+        # Attempt to find promoted results if it's the first time we perform query for single term.
+        if offset == 0 and self.single_term():
+            promoted, _, _ = self.promoted_results()
+            results = self._dedup_lines_results(promoted, results)
+        else:
+            promoted = []
+
+        return result_count, results, promoted
 
         # Test: If var-ref (or any structural query) returns 2 refs on one line, they should both get highlit.
 
-    def mixed_results(self, limit=100, mixing_limit=5):
-        """Return a mixed variety of results for the query."""
+    def promoted_results(self, promote_limit=5):
+        """Return a mixed variety of results for the query, along with some promoted if the
+        offset is zero. Assume that the query is for a single term."""
 
         # TODO next next: write tests for this stuff
-        # TODO next: consider merging into self.results; example: we provide promoted links only
-        #  when offset=0 and single term. Then we can mix in other results magically, even past offset 0.
-        term = self.single_term()
-        if not term:
-            return None, None
-
-        # Group together path: term, id: term, and regular term searches.
-        # TODO next: consider figuring out what kind of search brought the result
         # Only take the first word of the term because otherwise we'll bring in the wrong kinds of
         # results (path: and id: only take a single word)
-        first_word = term['arg'].split()[0]
-        _, ids = Query(self.es_search, 'id:%s' % first_word, self.enabled_plugins,
-                       self.is_case_sensitive).results(0, mixing_limit)
-        # Because we will want to count and also return.
-        ids = list(ids)
-        _, paths = Query(self.es_search, 'path:%s' % first_word, self.enabled_plugins,
-                         self.is_case_sensitive).results(0, mixing_limit - len(ids))
-        line_count, lines = self.results(0, limit)
-        # TODO next: consider uncommenting this part
-        # Set of (path, line) tuples we find in ids
-        #seen_lines = set((path, line_no) for _, path, texts, _ in ids for line_no, _ in texts)
-        ## Filter lines based on seen_lines
-        #lines = filter(lambda (icon, path, texts, _): texts,
-        #               ((icon, path, [(line_no, text) for line_no, text in texts if
-        #                              (path, line_no) not in seen_lines], is_binary) for
-        #                icon, path, texts, is_binary in lines))
-        # We don't add the id count because line count would include it.
-        return line_count, lines, chain(ids, paths)
+        term = self.single_term()['arg'].split()[0]
 
-    # TODO next: consider how to replace this by mixed_results
+        id_count, ids, _ = Query(self.es_search, 'id:%s' % term, self.enabled_plugins,
+                                 self.is_case_sensitive).results(0, promote_limit)
+        # Concretize results because we will want to count and also return.
+        ids = list(ids)
+        path_count, paths, _ = Query(self.es_search, 'path:%s' % term, self.enabled_plugins,
+                                     self.is_case_sensitive).results(0, promote_limit - len(ids))
+        paths = list(paths)
+
+        return ids + paths, id_count - len(ids), path_count - len(paths)
+
+    # TODO next: consider how to replace this by promoted_results
     def direct_result(self):
         """Return a single search result that is an exact match for the query.
 

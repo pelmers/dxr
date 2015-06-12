@@ -202,14 +202,17 @@ mark {
 /* TODO next */
 .promoted_container {
     border: 2px solid #686868;
-    padding: 3vh;
+    padding: 3vh 2vh 1vh;
+    margin-top: -2em;
 }
 .promoted_icon {
-    width: 2.5em;
-    height: 2.5em;
+    float: left;
+    width: 16px;
+    height: 16px;
 }
 .promoted_result {
     padding-bottom: 10px;
+    padding-left: 24px;
 }
 .promoted_line {
 }

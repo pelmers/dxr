@@ -106,11 +106,7 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
                  'is_binary': is_binary}
                 for line_icon, path, lines, is_binary in es_results]
     try:
-        if query.single_term() and offset == 0:
-            count, results, promoted = query.mixed_results(limit)
-        else:
-            count, results = query.results(offset, limit)
-            promoted = []
+        count, results, promoted = query.results(offset, limit)
     except BadTerm as exc:
         return jsonify({'error_html': exc.reason, 'error_level': 'warning'}), 400
 

@@ -252,6 +252,7 @@ $(function() {
                 threshold = window.innerHeight + 500;
 
             // Has the user reached the scrolling threshold and are there more results?
+            // TODO next: figure out why this doesn't trigger: previousDataLimit === resultsLineCount
             if ((maxScrollY - currentScrollPos) < threshold && previousDataLimit === resultsLineCount) {
                 clearInterval(scrollPoll);
 
@@ -330,7 +331,6 @@ $(function() {
      * @param {bool} append - Should the content be appended or overwrite
      */
     function populateResults(data, append) {
-        // TODO next: look at http://picpaste.com/pics/promoted_results-cyMa3FjS.1434054796.png
         data.www_root = dxr.wwwRoot;
         data.tree = dxr.tree;
         data.top_of_tree = dxr.wwwRoot + '/' + data.tree + '/source/';
