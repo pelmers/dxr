@@ -107,20 +107,18 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
                 for line_icon, path, lines, is_binary in es_results]
     try:
         if query.single_term() and offset == 0:
-            count, results, mixed = query.mixed_results(limit)
+            count, results, promoted = query.mixed_results(limit)
         else:
             count, results = query.results(offset, limit)
-            mixed = []
-        results = results_to_json(results)
-        mixed = results_to_json(mixed)
+            promoted = []
     except BadTerm as exc:
         return jsonify({'error_html': exc.reason, 'error_level': 'warning'}), 400
 
     return jsonify({
         'www_root': config.www_root,
         'tree': tree,
-        'results': results,
-        'mixed': mixed,
+        'results': results_to_json(results),
+        'promoted': results_to_json(promoted),
         'result_count': count,
         'result_count_formatted': format_number(count),
         'tree_tuples': _tree_tuples(query_text, is_case_sensitive)})

@@ -342,13 +342,13 @@ $(function() {
         data.query_string = $.param(params);
 
         // If no data is returned, inform the user.
-        if (!data.results.length && !data.mixed.length) {
+        if (!data.results.length && !data.promoted.length) {
             contentContainer
                 .empty()
                 .append(nunjucks.render('partial/results_container.html', data));
         } else {
             resultsLineCount = countLines(data.results);
-            [data.results, data.mixed].forEach(function(results) {
+            [data.results, data.promoted].forEach(function(results) {
                 for (var i = 0; i < results.length; i++) {
                     var icon = results[i].icon;
                     var resultHead = buildResultHead(results[i].path, data.tree, icon, results[i].is_binary);

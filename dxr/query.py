@@ -153,17 +153,22 @@ class Query(object):
         """Return a mixed variety of results for the query."""
 
         # TODO next next: write tests for this stuff
+        # TODO next: consider merging into self.results; example: we provide promoted links only
+        #  when offset=0 and single term. Then we can mix in other results magically, even past offset 0.
         term = self.single_term()
         if not term:
             return None, None
 
         # Group together path: term, id: term, and regular term searches.
         # TODO next: consider figuring out what kind of search brought the result
-        _, ids = Query(self.es_search, 'id:%s' % term['arg'], self.enabled_plugins,
+        # Only take the first word of the term because otherwise we'll bring in the wrong kinds of
+        # results (path: and id: only take a single word)
+        first_word = term['arg'].split()[0]
+        _, ids = Query(self.es_search, 'id:%s' % first_word, self.enabled_plugins,
                        self.is_case_sensitive).results(0, mixing_limit)
-        # Concretize because we will want to count and also return.
+        # Because we will want to count and also return.
         ids = list(ids)
-        _, paths = Query(self.es_search, 'path:%s' % term['arg'], self.enabled_plugins,
+        _, paths = Query(self.es_search, 'path:%s' % first_word, self.enabled_plugins,
                          self.is_case_sensitive).results(0, mixing_limit - len(ids))
         line_count, lines = self.results(0, limit)
         # TODO next: consider uncommenting this part

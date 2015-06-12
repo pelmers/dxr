@@ -1,27 +1,28 @@
 {% from "partial/result_lines.html" import result_lines -%}
 
-{% macro mixed_list(mixed, www_root, tree) -%}
-  {% for result in mixed %}
+{% macro promoted_list(promoted, www_root, tree) -%}
+  {% for result in promoted %}
     {# TODO next: fill out some pretty css/html here. #}
-    <div>
-      <span class="mixed_path">{{ result.pathLine | safe }}</span>
-      <div>
-        {% for entry in result.lines %}
+    <div class="promoted_icon {{ result.iconClass }}"></div>
+    <div class="promoted_result">
+      <span class="promoted_path">{{ result.pathLine | safe }}</span>
+      {% for entry in result.lines %}
+        <div class="promoted_line">
           <span class="left-column">
            <a href="{{ www_root }}/{{ tree }}/source/{{ result.path }}#{{ entry.line_number }}">
              {{ entry.line_number }}
            </a>
          </span>
-         <span>
+         <span class="promoted_text">
            <a href="{{ www_root }}/{{ tree }}/source/{{ result.path }}#{{ entry.line_number }}">
              <code aria-labelledby="{{ entry.line_number }}">{{ entry.line|safe }}</code>
            </a>
          </span>
-        {% endfor %}
-      </div>
+        </div>
+      {% endfor %}
     </div>
   {% endfor %}
 {%- endmacro %}
 
 {# When not being included as a macro, render the code above. #}
-{{ mixed_list(mixed, www_root, tree) }}
+{{ promoted_list(promoted, www_root, tree) }}

@@ -198,11 +198,27 @@ mark {
     background-color: transparent;
 }
 
-/* promoted mixed stuff */
-.mixed_container {
-    /* TODO next */
-    border: 2px solid #000000;
-    padding: 15px;
+/* promoted stuff */
+/* TODO next */
+.promoted_container {
+    border: 2px solid #686868;
+    padding: 3vh;
+}
+.promoted_icon {
+    width: 2.5em;
+    height: 2.5em;
+}
+.promoted_result {
+    padding-bottom: 10px;
+}
+.promoted_line {
+}
+.promoted_line.left-column {
+    display: inline;
+    width: 6ex;
+}
+.promoted_text {
+    padding: .1rem .5rem;
 }
 
 /* results */
@@ -422,8 +438,8 @@ mark {
 .breadcrumbs a:visited,
 .bubble a:link,
 .bubble a:visited,
-.mixed_path a:link,
-.mixed_path a:visited,
+.promoted_path a:link,
+.promoted_path a:visited,
 .result-head a:link,
 .result-head a:visited {
     color: #0095dd;

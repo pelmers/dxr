@@ -1,5 +1,5 @@
 var templateFiles = [
-    'dxr/static/templates/partial/mixed.html',
+    'dxr/static/templates/partial/promoted.html',
     'dxr/static/templates/partial/results_container.html',
     'dxr/static/templates/partial/result_separator.html',
     'dxr/static/templates/partial/results.html',
