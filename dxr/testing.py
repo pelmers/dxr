@@ -45,7 +45,7 @@ class TestCase(unittest.TestCase):
 
     def found_files(self, query, is_case_sensitive=True):
         """Return the set of paths of files found by a search query."""
-        return set(result['path'] for result in
+        return set(result['path'].replace('<b>', '').replace('</b>', '') for result in
                    self.search_results(query,
                                        is_case_sensitive=is_case_sensitive))
 
@@ -134,7 +134,8 @@ class TestCase(unittest.TestCase):
         """
         response = self.search_response(query,
                                         is_case_sensitive=is_case_sensitive)
-        return json.loads(response.data)['results']
+        data = json.loads(response.data)
+        return data['results'] + data['promoted']
 
     def clang_at_least(self, version):
         output = getoutput("clang --version")

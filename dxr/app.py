@@ -92,8 +92,10 @@ def search(tree):
                   is_case_sensitive=is_case_sensitive)
 
     # Fire off one of the two search routines:
-    searcher = _search_json if _request_wants_json() else _search_html
-    return searcher(query, tree, query_text, is_case_sensitive, offset, limit, config)
+    if _request_wants_json():
+        return _search_json(query, tree, query_text, is_case_sensitive, offset, limit, config)
+    else:
+        return _search_html(query, tree, query_text, is_case_sensitive, config)
 
 
 def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, config):
@@ -120,7 +122,7 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
         'tree_tuples': _tree_tuples(query_text, is_case_sensitive)})
 
 
-def _search_html(query, tree, query_text, is_case_sensitive, offset, limit, config):
+def _search_html(query, tree, query_text, is_case_sensitive, config):
     """Search a few different ways, and return the results as HTML.
 
     Try a "direct search" (for exact identifier matches, etc.). If that

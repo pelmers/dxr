@@ -3,7 +3,6 @@ from itertools import chain, groupby
 from operator import itemgetter
 
 import re
-
 from parsimonious import Grammar, NodeVisitor
 
 from dxr.filters import LINE, FILE
@@ -158,24 +157,24 @@ class Query(object):
             results = self._file_query_results(results, path_highlighters)
 
         # Attempt to find promoted results if it's the first time we perform query for single term.
-        if offset == 0 and self.single_term():
-            promoted, _, _ = self.promoted_results()
+        term = self.single_term()
+        if offset == 0 and term and term['arg']:
+            promoted, _, _ = self.promoted_results(term)
             results = self._dedup_lines_results(promoted, results)
-        else:
-            promoted = []
+            return result_count, self._dedup_lines_results(promoted, results), promoted
 
-        return result_count, results, promoted
+        return result_count, results, []
 
         # Test: If var-ref (or any structural query) returns 2 refs on one line, they should both get highlit.
 
-    def promoted_results(self, promote_limit=5):
-        """Return a mixed variety of results for the query, along with some promoted if the
-        offset is zero. Assume that the query is for a single term."""
+    def promoted_results(self, term, promote_limit=5):
+        """Return a tuple ([promoted results], number of other exact id matches, number of other
+        path matches), where the number of promoted results is no more than promote_limit."""
 
         # TODO next next: write tests for this stuff
         # Only take the first word of the term because otherwise we'll bring in the wrong kinds of
         # results (path: and id: only take a single word)
-        term = self.single_term()['arg'].split()[0]
+        term = term['arg'].split()[0]
 
         id_count, ids, _ = Query(self.es_search, 'id:%s' % term, self.enabled_plugins,
                                  self.is_case_sensitive).results(0, promote_limit)
