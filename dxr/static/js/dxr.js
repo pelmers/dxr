@@ -342,20 +342,21 @@ $(function() {
         data.query_string = $.param(params);
 
         // If no data is returned, inform the user.
-        if (!data.results.length) {
+        if (!data.results.length && !data.mixed.length) {
             contentContainer
                 .empty()
                 .append(nunjucks.render('partial/results_container.html', data));
         } else {
-            var results = data.results;
-            resultsLineCount = countLines(results);
-
-            for (var i = 0; i < results.length; i++) {
-                var icon = results[i].icon;
-                var resultHead = buildResultHead(results[i].path, data.tree, icon, results[i].is_binary);
-                results[i].iconClass = resultHead[0];
-                results[i].pathLine = resultHead[1];
-            }
+            resultsLineCount = countLines(data.results);
+            [data.results, data.mixed].forEach(function(results) {
+                for (var i = 0; i < results.length; i++) {
+                    var icon = results[i].icon;
+                    var resultHead = buildResultHead(results[i].path, data.tree, icon, results[i].is_binary);
+                    results[i].iconClass = resultHead[0];
+                    results[i].pathLine = resultHead[1];
+                }
+            });
+            console.log(data);
 
             if (!append) {
                 contentContainer

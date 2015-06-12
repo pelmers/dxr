@@ -1,5 +1,12 @@
+{% from "partial/mixed.html" import mixed_list -%}
 {% from "partial/results.html" import results_list -%}
 {% from "partial/results_header.html" import results_header -%}
+
+{% if mixed|length > 0 %}
+  <div class="mixed_container">
+    {{ mixed_list(mixed, www_root, tree) }}
+  </div>
+{% endif %}
 
 {{ results_header(result_count, result_count_formatted, top_of_tree, tree_tuples, tree) }}
 

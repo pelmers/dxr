@@ -112,6 +112,7 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
             count, results = query.results(offset, limit)
             mixed = []
         results = results_to_json(results)
+        mixed = results_to_json(mixed)
     except BadTerm as exc:
         return jsonify({'error_html': exc.reason, 'error_level': 'warning'}), 400
 

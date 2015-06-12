@@ -158,15 +158,15 @@ class Query(object):
             return None, None
 
         # Group together path: term, id: term, and regular term searches.
+        # TODO next: consider figuring out what kind of search brought the result
         _, ids = Query(self.es_search, 'id:%s' % term['arg'], self.enabled_plugins,
                        self.is_case_sensitive).results(0, mixing_limit)
         # Concretize because we will want to count and also return.
         ids = list(ids)
-        path_count, paths = Query(self.es_search, 'path:%s' % term['arg'], self.enabled_plugins,
-                                  self.is_case_sensitive).results(0, mixing_limit - len(ids))
-        paths = list(paths)
+        _, paths = Query(self.es_search, 'path:%s' % term['arg'], self.enabled_plugins,
+                         self.is_case_sensitive).results(0, mixing_limit - len(ids))
         line_count, lines = self.results(0, limit)
-        # TODO: consider uncommenting this part
+        # TODO next: consider uncommenting this part
         # Set of (path, line) tuples we find in ids
         #seen_lines = set((path, line_no) for _, path, texts, _ in ids for line_no, _ in texts)
         ## Filter lines based on seen_lines
@@ -175,7 +175,7 @@ class Query(object):
         #                              (path, line_no) not in seen_lines], is_binary) for
         #                icon, path, texts, is_binary in lines))
         # We don't add the id count because line count would include it.
-        return path_count + line_count, lines, list(chain(ids, paths))
+        return line_count, lines, chain(ids, paths)
 
     # TODO next: consider how to replace this by mixed_results
     def direct_result(self):
