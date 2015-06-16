@@ -1,11 +1,11 @@
 {% from "partial/result_lines.html" import result_lines -%}
 
-{% macro promoted_list(promoted, www_root, tree) -%}
+{% macro promoted_list(query, promoted, www_root, tree) -%}
   {% for result in promoted %}
-    {# TODO next: fill out some pretty css/html here. #}
     <div class="promoted_icon {{ result.iconClass }}"></div>
     <div class="promoted_result">
       <span class="promoted_path">{{ result.pathLine | safe }}</span>
+    {# TODO next: give a link to more ids and paths results #}
       {% for entry in result.lines %}
         <div class="promoted_line">
           <span class="left-column">
@@ -22,7 +22,11 @@
       {% endfor %}
     </div>
   {% endfor %}
+    <div class="promoted_see_more">
+        <a href="{{ www_root }}/{{ tree }}/search?q=id:{{ query }}">See all identifier results...</a>
+        <a href="{{ www_root }}/{{ tree }}/search?q=path:{{ query }}" style="float: right;">See all path results...</a>
+    </div>
 {%- endmacro %}
 
 {# When not being included as a macro, render the code above. #}
-{{ promoted_list(promoted, www_root, tree) }}
+{{ promoted_list(query, promoted, www_root, tree) }}

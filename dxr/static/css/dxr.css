@@ -174,11 +174,8 @@ td pre code {
     position: relative;
     float: left;
     clear: none;
-    padding: 0 0 0 1em;
-    float: left;
     margin: 0;
     padding: 0;
-    position: relative;
 }
 code a {
     cursor: pointer;
@@ -199,11 +196,10 @@ mark {
 }
 
 /* promoted stuff */
-/* TODO next */
 .promoted_container {
     border: 2px solid #686868;
-    padding: 3vh 2vh 1vh;
     margin-top: -2em;
+    padding: 3vh 2vh 1vh;
 }
 .promoted_icon {
     float: left;
@@ -211,10 +207,9 @@ mark {
     height: 16px;
 }
 .promoted_result {
-    padding-bottom: 10px;
+    padding-top: 5px;
+    padding-bottom: 5px;
     padding-left: 24px;
-}
-.promoted_line {
 }
 .promoted_line.left-column {
     display: inline;
@@ -443,6 +438,8 @@ mark {
 .bubble a:visited,
 .promoted_path a:link,
 .promoted_path a:visited,
+.promoted_see_more a:link,
+.promoted_see_more a:visited,
 .result-head a:link,
 .result-head a:visited {
     color: #0095dd;

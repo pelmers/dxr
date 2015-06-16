@@ -3,9 +3,9 @@
 {% from "partial/results_header.html" import results_header -%}
 
 {% if promoted|length > 0 %}
-  <span style="padding-left: 20px;">Top matches:</span>
+  <span style="padding-left: 20px; font-weight: bolder; font-size: 1.2em;">Top matches:</span>
   <div class="promoted_container">
-    {{ promoted_list(promoted, www_root, tree) }}
+    {{ promoted_list(query, promoted, www_root, tree) }}
   </div>
 {% endif %}
 
