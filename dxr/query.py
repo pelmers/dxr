@@ -29,6 +29,31 @@ def direct_searchers(plugins):
     return [searcher for searcher, _ in sortables]
 
 
+def _query_json(filters):
+    """Return the JSON data for ES query using these filters, a list of lists."""
+    # An ORed-together ball for each term's filters, omitting filters that
+    # punt by returning {} and ors that contain nothing but punts:
+    ors = filter(None, [filter(None, (f.filter() for f in term))
+                        for term in filters])
+    ors = [{'or': x} for x in ors]
+
+    if ors:
+        return {
+            'filtered': {
+                'query': {
+                    'match_all': {}
+                },
+                'filter': {
+                    'and': ors
+                }
+            }
+        }
+    else:
+        return {
+            'match_all': {}
+        }
+
+
 class Query(object):
     """Query object, constructor will parse any search query"""
 
@@ -85,6 +110,14 @@ class Query(object):
                    [],
                    file.get('is_binary', False))
 
+    def instantiate_filters(self):
+        """Instantiate applicable filters, yielding a list of lists, each inner
+        list representing the filters of the name of the parallel term."""
+
+        enabled_filters_by_name = filters_by_name(self.enabled_plugins)
+        return [[f(term, self.enabled_plugins) for f in enabled_filters_by_name[term['name']]]
+                   for term in self.terms]
+
     def results(self, offset=0, limit=100):
         """Return a count of search results and, as an iterable, the results
         themselves::
@@ -97,44 +130,12 @@ class Query(object):
                          ...]}
 
         """
-        # Instantiate applicable filters, yielding a list of lists, each inner
-        # list representing the filters of the name of the parallel term. We
-        # will OR the elements of the inner lists and then AND those OR balls
-        # together.
-        enabled_filters_by_name = filters_by_name(self.enabled_plugins)
-        filters = [[f(term, self.enabled_plugins) for f in enabled_filters_by_name[term['name']]]
-                   for term in self.terms]
+
+        filters = self.instantiate_filters()
+        query = _query_json(filters)
         # See if we're returning lines or just files-and-folders:
         is_line_query = any(f.domain == LINE for f in
                             chain.from_iterable(filters))
-
-        # An ORed-together ball for each term's filters, omitting filters that
-        # punt by returning {} and ors that contain nothing but punts:
-        ors = filter(None, [filter(None, (f.filter() for f in term))
-                            for term in filters])
-        ors = [{'or': x} for x in ors]
-
-        if not is_line_query:
-            # Don't show folders yet in search results. I don't think the JS
-            # is able to handle them.
-            ors.append({'term': {'is_folder': False}})
-
-        if ors:
-            query = {
-                'filtered': {
-                    'query': {
-                        'match_all': {}
-                    },
-                    'filter': {
-                        'and': ors
-                    }
-                }
-            }
-        else:
-            query = {
-                'match_all': {}
-            }
-
         results = self.es_search(
             {'query': query,
              'sort': ['path', 'number'] if is_line_query else ['path'],
