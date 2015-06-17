@@ -425,8 +425,12 @@ $(function() {
                 if (myRequestNumber > displayedRequestNumber) {
                     displayedRequestNumber = myRequestNumber;
                     populateResults(data, false);
-                    historyWaiter = setTimeout(history.pushState.bind(history, {}, '', queryString),
-                        timeouts.history);
+                    if (redirect)
+                        // Then the enter key was pressed and we want to update history state now.
+                        history.pushState({}, '', queryString);
+                    else
+                        historyWaiter = setTimeout(history.pushState.bind(history, {}, '', queryString),
+                            timeouts.history);
                 }
 
                 previousDataLimit = limit;
