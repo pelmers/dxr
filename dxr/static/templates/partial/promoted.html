@@ -22,10 +22,10 @@
       {% endfor %}
     </div>
   {% endfor %}
-    <div class="promoted_see_more">
-        <a href="{{ www_root }}/{{ tree }}/search?q=id:{{ query }}">See all identifier results...</a>
-        <a href="{{ www_root }}/{{ tree }}/search?q=path:{{ query }}" style="float: right;">See all path results...</a>
-    </div>
+  <div class="promoted_see_more">
+    <a href="{{ www_root }}/{{ tree }}/search?q=id:{{ query }}">See all identifier results...</a><br>
+    <a href="{{ www_root }}/{{ tree }}/search?q=path:{{ query }}">See all path results...</a>
+  </div>
 {%- endmacro %}
 
 {# When not being included as a macro, render the code above. #}
