@@ -97,6 +97,20 @@ def search(tree):
 
 def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, config):
     """Do a normal search, and return the results as JSON."""
+    # If we're asked to redirect and have a direct hit, then return the url to that.
+    if request.values.get('redirect') == 'true':
+        result = query.direct_result()
+        if result:
+            path, line = result
+            # TODO: Does this escape query_text properly?
+            return jsonify({
+                'redirect': '%s/%s/source/%s?from=%s%s#%i' %
+                            (config.www_root,
+                             tree,
+                             path,
+                             query_text,
+                             '&case=true' if is_case_sensitive else '',
+                             line)})
     try:
         count_and_results = query.results(offset, limit)
         # Convert to dicts for ease of manipulation in JS:
@@ -124,23 +138,6 @@ def _search_html(query, tree, query_text, is_case_sensitive, offset, limit, conf
     doesn't work, fall back to a normal search.
 
     """
-    should_redirect = request.values.get('redirect') == 'true'
-
-    # Try for a direct result:
-    if should_redirect:  # always true in practice?
-        result = query.direct_result()
-        if result:
-            path, line = result
-            # TODO: Does this escape query_text properly?
-            return redirect(
-                '%s/%s/source/%s?from=%s%s#%i' %
-                (config.www_root,
-                 tree,
-                 path,
-                 query_text,
-                 '&case=true' if is_case_sensitive else '',
-                 line))
-
     frozen = frozen_config(tree)
 
     # Try a normal search:
