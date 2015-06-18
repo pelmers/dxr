@@ -291,7 +291,6 @@ class PathFilter(Filter):
                          '</code>, <code>?</code>, and <code>[...]</code> act '
                          'as shell wildcards.')
 
-    # TODO next: cherry-pick in path higlighting (also in dxr.js)
     @negatable
     def filter(self):
         glob = self._term['arg']
@@ -303,6 +302,20 @@ class PathFilter(Filter):
         except NoTrigrams:
             raise BadTerm('Path globs need at least 3 literal characters in a row '
                           'for speed.')
+
+    def highlight_path(self, result):
+        path = result['path'][0]
+        term = self._term['arg']
+        if not self._term['case_sensitive']:
+            path = path.lower()
+            term = term.lower()
+        start = 0
+        while True:
+            start = path.find(term, start)
+            if start == -1:
+                break
+            yield start, start + len(term)
+            start += len(term)
 
 
 class ExtFilter(Filter):

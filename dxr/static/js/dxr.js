@@ -102,9 +102,31 @@ $(function() {
      * @param {string} icon - The icon string returned in the JSON payload.
      */
     function buildResultHead(fullPath, tree, icon, isBinary) {
+        function rejoinMarkup(splitOnSlash, tag) {
+            // Rejoin consecutive elements of splitOnSlash if they were split on </tag>.
+            var newSplits = [],
+                i = 0;
+            while (i < splitOnSlash.length - 1) {
+                var current = splitOnSlash[i],
+                    next = splitOnSlash[i + 1];
+                if (current.lastIndexOf("<") === current.length - 1 && next.indexOf(tag + ">") === 0) {
+                    newSplits.push([current, next].join("/"));
+                    i++;
+                } else {
+                    newSplits.push(current);
+                }
+                i++;
+            }
+            if (i < splitOnSlash.length)
+                newSplits.push(splitOnSlash[splitOnSlash.length - 1]);
+            return newSplits;
+        }
+
         var pathLines = '',
             pathRoot = '/' + tree + '/source/',
-            paths = fullPath.split('/'),
+            unhighlightedPath = fullPath.replace(/<\/?b>/g, ""),
+            paths = unhighlightedPath.split('/'),
+            displayPaths = rejoinMarkup(fullPath.split('/'), "b"),
             splitPathLength = paths.length,
             dataPath = [],
             iconClass = icon.substring(icon.indexOf('/') + 1);
@@ -118,7 +140,7 @@ $(function() {
 
             pathLines += nunjucks.render('path_line.html', {
                 'data_path': dataPath.join('/'),
-                'display_path': paths[pathIndex],
+                'display_path': displayPaths[pathIndex],
                 'url': pathRoot + dataPath.join('/'),
                 'is_first_or_only': isFirstOrOnly,
                 'is_dir': !isLastOrOnly,
@@ -140,7 +162,7 @@ $(function() {
         requestsInFlight = 0,  // Number of search requests in flight, so we know whether to hide the activity indicator
         displayedRequestNumber = 0,
         didScroll = false,
-        resultsLineCount = 0,
+        resultsDone = true,
         dataOffset = 0,
         previousDataLimit = 0,
         defaultDataLimit = 100;
@@ -232,7 +254,7 @@ $(function() {
                 threshold = window.innerHeight + 500;
 
             // Has the user reached the scrolling threshold and are there more results?
-            if ((maxScrollY - currentScrollPos) < threshold && previousDataLimit <= resultsLineCount) {
+            if ((maxScrollY - currentScrollPos) < threshold && !resultsDone) {
                 clearInterval(scrollPoll);
 
                 // If a user hits enter on the landing page and there was no direct result,
@@ -261,18 +283,6 @@ $(function() {
                 });
             }
         }
-    }
-
-    /**
-     * Given a list of results from the search API, return the total number of
-     * lines across all results.
-     */
-    function countLines(results) {
-        var total = 0;
-        for (var k = 0; k < results.length; k++) {
-            total += results[k].lines.length;
-        }
-        return total;
     }
 
     /**
@@ -315,6 +325,7 @@ $(function() {
             case: data.is_case_sensitive
         };
         data.query_string = $.param(params);
+        resultsDone = data.done;
 
         // If no data is returned, inform the user.
         if (!data.results.length) {
@@ -323,13 +334,12 @@ $(function() {
                 .append(nunjucks.render('partial/results_container.html', data));
         } else {
             var results = data.results;
-            resultsLineCount = countLines(results);
 
-            for (var result in results) {
-                var icon = results[result].icon;
-                var resultHead = buildResultHead(results[result].path, data.tree, icon, results[result].is_binary);
-                results[result].iconClass = resultHead[0];
-                results[result].pathLine = resultHead[1];
+            for (var i = 0; i < results.length; i++) {
+                var icon = results[i].icon;
+                var resultHead = buildResultHead(results[i].path, data.tree, icon, results[i].is_binary);
+                results[i].iconClass = resultHead[0];
+                results[i].pathLine = resultHead[1];
             }
 
             if (!append) {

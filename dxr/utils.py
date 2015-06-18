@@ -236,3 +236,22 @@ def rmtree_if_exists(folder):
     except OSError as exc:
         if exc.errno != ENOENT:
             raise
+
+
+def mixerator(a, b, n):
+    """Mix iterators a and b, yielding 1 element of a for every n-1 elements of b."""
+    leftover = None
+    while not leftover:
+        try:
+            yield next(a)
+        except StopIteration:
+            leftover = b
+            break
+        for _ in range(n-1):
+            try:
+                yield next(b)
+            except StopIteration:
+                leftover = a
+                break
+    for elem in leftover:
+        yield elem

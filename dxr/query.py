@@ -8,7 +8,7 @@ from parsimonious import Grammar, NodeVisitor
 
 from dxr.filters import LINE, FILE
 from dxr.mime import icon
-from dxr.utils import append_update, cached
+from dxr.utils import append_update, cached, mixerator
 
 
 @cached
@@ -30,33 +30,56 @@ def direct_searchers(plugins):
     return [searcher for searcher, _ in sortables]
 
 
-def _query_json(filters):
-    """Return the JSON data for ES query using these filters, a list of lists."""
-    # An ORed-together ball for each term's filters, omitting filters that
-    # punt by returning {} and ors that contain nothing but punts:
-    ors = filter(None, [filter(None, (f.filter() for f in term))
-                        for term in filters])
-    ors = [{'or': x} for x in ors]
+def _file_query_results(results, path_highlighters):
+    """Return an iterable of results of a FILE-domain query."""
+    for file in results:
+        yield (icon(file['path'][0]),
+               highlight(file['path'][0],
+                         chain.from_iterable(
+                             h(file) for h in path_highlighters)),
+               [],
+               file.get('is_binary', False))
 
-    if ors:
-        return {
-            'filtered': {
-                'query': {
-                    'match_all': {}
-                },
-                'filter': {
-                    'and': ors
-                }
-            }
-        }
+
+def _line_query_results(filters, results, path_highlighters):
+    """Return an iterable of results of a LINE-domain query."""
+    content_highlighters = [f.highlight_content for f in chain.from_iterable(filters)
+                            if hasattr(f, 'highlight_content')]
+
+    # Group lines into files:
+    for path, lines in groupby(results, lambda r: r['path'][0]):
+        lines = list(lines)
+        highlit_path = highlight(
+            path,
+            chain.from_iterable((h(lines[0]) for h in
+                                 path_highlighters)))
+        icon_for_path = icon(path)
+        yield (icon_for_path,
+               highlit_path,
+               [(line['number'][0],
+                 highlight(line['content'][0].rstrip('\n\r'),
+                           chain.from_iterable(h(line) for h in
+                                               content_highlighters)))
+                for line in lines],
+               False)
+
+
+def _highlight_results(es_hits, filters, is_line_query):
+    result_count = es_hits['total']
+    results = [r['_source'] for r in es_hits['hits']]
+
+    path_highlighters = [f.highlight_path for f in chain.from_iterable(filters)
+                         if hasattr(f, 'highlight_path')]
+    if is_line_query:
+        return result_count, _line_query_results(filters, results, path_highlighters)
     else:
-        return {
-            'match_all': {}
-        }
+        return result_count, _file_query_results(results, path_highlighters)
 
 
 class Query(object):
     """Query object, constructor will parse any search query"""
+    # Ratio of line results: path results in mixed queries.
+    mixing_factor = 5
 
     def __init__(self, es_search, querystr, enabled_plugins, is_case_sensitive=True):
         self.es_search = es_search
@@ -79,37 +102,38 @@ class Query(object):
             if term['name'] == 'text' and not term['not']:
                 return term
 
-    def _line_query_results(self, filters, results, path_highlighters):
-        """Return an iterable of results of a LINE-domain query."""
-        content_highlighters = [f.highlight_content for f in chain.from_iterable(filters)
-                                if hasattr(f, 'highlight_content')]
+    def _perform_query(self, filters, is_line_query, offset, limit):
+        """Return (number of results, results) tuple for search using these filters.
+        """
 
-        # Group lines into files:
-        for path, lines in groupby(results, lambda r: r['path'][0]):
-            lines = list(lines)
-            highlit_path = highlight(
-                path,
-                chain.from_iterable((h(lines[0]) for h in
-                                     path_highlighters)))
-            icon_for_path = icon(path)
-            yield (icon_for_path,
-                   highlit_path,
-                   [(line['number'][0],
-                     highlight(line['content'][0].rstrip('\n\r'),
-                               chain.from_iterable(h(line) for h in
-                                                   content_highlighters)))
-                    for line in lines],
-                   False)
+        # An ORed-together ball for each term's filters, omitting filters that
+        # punt by returning {} and ors that contain nothing but punts:
+        ors = filter(None, [filter(None, (f.filter() for f in term))
+                            for term in filters])
+        ors = [{'or': x} for x in ors]
 
-    def _file_query_results(self, results, path_highlighters):
-        """Return an iterable of results of a FILE-domain query."""
-        for file in results:
-            yield (icon(file['path'][0]),
-                   highlight(file['path'][0],
-                             chain.from_iterable(
-                                 h(file) for h in path_highlighters)),
-                   [],
-                   file.get('is_binary', False))
+        if ors:
+            query = {
+                'filtered': {
+                    'query': {
+                        'match_all': {}
+                    },
+                    'filter': {
+                        'and': ors
+                    }
+                }
+            }
+        else:
+            query = {
+                'match_all': {}
+            }
+        hits = self.es_search(
+            {'query': query,
+             'sort': ['path', 'number'] if is_line_query else ['path'],
+             'from': offset,
+             'size': limit},
+            doc_type=LINE if is_line_query else FILE)['hits']
+        return _highlight_results(hits, filters, is_line_query)
 
     def instantiate_filters(self):
         """Instantiate applicable filters, yielding a list of lists, each inner
@@ -117,7 +141,7 @@ class Query(object):
 
         enabled_filters_by_name = filters_by_name(self.enabled_plugins)
         return [[f(term, self.enabled_plugins) for f in enabled_filters_by_name[term['name']]]
-                   for term in self.terms]
+                for term in self.terms]
 
     def results(self, offset=0, limit=100):
         """Return a count of search results and, as an iterable, the results
@@ -133,49 +157,30 @@ class Query(object):
         """
 
         filters = self.instantiate_filters()
-        query = _query_json(filters)
         term = self.single_term()
-        # Check whether to mix: it only makes sense for single-word queries
-        if term and 'arg' in term and len(term['arg'].split()) == 1:
-            word = term['arg']
-            # combine the mixed queries
-            # TODO next: construct dicts directly rather than with new query objects
-            id_query = _query_json(
-                Query(self.es_search, "id:{}".format(word), self.enabled_plugins,
-                      self.is_case_sensitive).instantiate_filters())
-            # TODO next: how do I mix in path queries since they search on FILE rather than LINE ?
-            # I think it will be necessary to construct two queries since it hits different URL endpoints.
-            path_query = (
-                Query(self.es_search, "path:{}".format(word), self.enabled_plugins,
-                      self.is_case_sensitive).instantiate_filters())
-            # TODO next: somehow know how many of each? we would need two offsets... le sigh.
-            file_limit = limit / 3
-            line_limit = limit - file_limit
-            line_query = {
-                'filtered': {'filter': {
-                    'or': query['filtered']['filter']['and'] + id_query['filtered']['filter']['and']}}
-            }
-        # See if we're returning lines or just files-and-folders:
-        is_line_query = any(f.domain == LINE for f in
-                            chain.from_iterable(filters))
-        results = self.es_search(
-            {'query': query,
-             'sort': ['path', 'number'] if is_line_query else ['path'],
-             'from': offset,
-             'size': limit},
-            doc_type=LINE if is_line_query else FILE)['hits']
-        result_count = results['total']
-        results = [r['_source'] for r in results['hits']]
+        # Check whether to mix: it only makes sense for single term queries
+        if term and 'arg' in term:
+            from dxr.plugins.core import PathFilter
+            # note: just paths mixing for now, since the regular query already gets ids,
+            # and trying to bump up id results would not work well since everything is sorted
 
-        path_highlighters = [f.highlight_path for f in chain.from_iterable(filters)
-                             if hasattr(f, 'highlight_path')]
-        # TODO: consider changing to a tuple
-        return {'result_count': result_count,
-                'results': self._line_query_results(filters, results, path_highlighters)
-                           if is_line_query
-                           else self._file_query_results(results, path_highlighters)}
-
-        # Test: If var-ref (or any structural query) returns 2 refs on one line, they should both get highlit.
+            # Compute the number of each kind of result to show more of.
+            path_offset = int(offset / self.mixing_factor)
+            path_limit = int(limit / self.mixing_factor)
+            # Perform the queries and mix the results.
+            path_count, path_results = self._perform_query(
+                [[PathFilter(term, self.enabled_plugins)]], False, path_offset, path_limit)
+            line_count, line_results = self._perform_query(filters, True, offset - path_offset,
+                                                           limit - path_limit)
+            # We are done if we have returned all the path and line results.
+            done = ((offset - path_offset) + (limit - path_limit) >= line_count) and (
+                (path_offset + path_limit >= path_count))
+            return path_count + line_count, mixerator(path_results, line_results, 2), done
+        else:
+            is_line_query = any(f.domain == LINE for f in
+                                chain.from_iterable(filters))
+            count, results = self._perform_query(filters, is_line_query, offset, limit)
+            return count, results, offset + limit >= count
 
     def direct_result(self):
         """Return a single search result that is an exact match for the query.

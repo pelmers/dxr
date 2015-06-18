@@ -113,13 +113,13 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
                                                               is_case_sensitive else 'false'}))
                             + '#{}'.format(line)})
     try:
-        count_and_results = query.results(offset, limit)
+        count, results, done = query.results(offset, limit)
         # Convert to dicts for ease of manipulation in JS:
         results = [{'icon': icon,
                     'path': path,
                     'lines': [{'line_number': nb, 'line': l} for nb, l in lines],
                     'is_binary': is_binary}
-                   for icon, path, lines, is_binary in count_and_results['results']]
+                   for icon, path, lines, is_binary in results]
     except BadTerm as exc:
         return jsonify({'error_html': exc.reason, 'error_level': 'warning'}), 400
 
@@ -127,8 +127,9 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
         'www_root': config.www_root,
         'tree': tree,
         'results': results,
-        'result_count': count_and_results['result_count'],
-        'result_count_formatted': format_number(count_and_results['result_count']),
+        'done': done,
+        'result_count': count,
+        'result_count_formatted': format_number(count),
         'tree_tuples': _tree_tuples(query_text, is_case_sensitive)})
 
 
