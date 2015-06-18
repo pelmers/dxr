@@ -1,6 +1,7 @@
 import cgi
 from itertools import chain, groupby
 from operator import itemgetter
+
 import re
 
 from parsimonious import Grammar, NodeVisitor
@@ -133,6 +134,27 @@ class Query(object):
 
         filters = self.instantiate_filters()
         query = _query_json(filters)
+        term = self.single_term()
+        # Check whether to mix: it only makes sense for single-word queries
+        if term and 'arg' in term and len(term['arg'].split()) == 1:
+            word = term['arg']
+            # combine the mixed queries
+            # TODO next: construct dicts directly rather than with new query objects
+            id_query = _query_json(
+                Query(self.es_search, "id:{}".format(word), self.enabled_plugins,
+                      self.is_case_sensitive).instantiate_filters())
+            # TODO next: how do I mix in path queries since they search on FILE rather than LINE ?
+            # I think it will be necessary to construct two queries since it hits different URL endpoints.
+            path_query = (
+                Query(self.es_search, "path:{}".format(word), self.enabled_plugins,
+                      self.is_case_sensitive).instantiate_filters())
+            # TODO next: somehow know how many of each? we would need two offsets... le sigh.
+            file_limit = limit / 3
+            line_limit = limit - file_limit
+            line_query = {
+                'filtered': {'filter': {
+                    'or': query['filtered']['filter']['and'] + id_query['filtered']['filter']['and']}}
+            }
         # See if we're returning lines or just files-and-folders:
         is_line_query = any(f.domain == LINE for f in
                             chain.from_iterable(filters))
@@ -147,6 +169,7 @@ class Query(object):
 
         path_highlighters = [f.highlight_path for f in chain.from_iterable(filters)
                              if hasattr(f, 'highlight_path')]
+        # TODO: consider changing to a tuple
         return {'result_count': result_count,
                 'results': self._line_query_results(filters, results, path_highlighters)
                            if is_line_query

@@ -291,6 +291,7 @@ class PathFilter(Filter):
                          '</code>, <code>?</code>, and <code>[...]</code> act '
                          'as shell wildcards.')
 
+    # TODO next: cherry-pick in path higlighting (also in dxr.js)
     @negatable
     def filter(self):
         glob = self._term['arg']
