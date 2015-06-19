@@ -278,6 +278,12 @@ class TextFilter(Filter):
                            maybe_lower(self._term['arg'])))
 
 
+class LineFilter(TextFilter):
+    name = 'line'
+    domain = LINE
+    description = Markup('Find text in a line.')
+
+
 class PathFilter(Filter):
     """Substring filter for paths
 

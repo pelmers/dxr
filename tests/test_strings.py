@@ -23,8 +23,8 @@ class StringTests(SingleFileTestCase):
 
     def test_empty_quotes(self):
         """An effectively empty query should not filter the results at all."""
-        eq_(len(self.found_files('"')), 1)
-        eq_(len(self.found_files('""')), 1)
+        eq_(len(self.found_files('line:"')), 1)
+        eq_(len(self.found_files('line:""')), 1)
 
         # Regex too short to run:
         eq_(self.search_response('regexp:""').status_code, 400)

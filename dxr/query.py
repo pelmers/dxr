@@ -175,6 +175,8 @@ class Query(object):
             # We are done if we have returned all the path and line results.
             done = ((offset - path_offset) + (limit - path_limit) >= line_count) and (
                 (path_offset + path_limit >= path_count))
+            # TODO next: make the mixerator operate on lists of lists?
+            # since number of lines per file is variable
             return path_count + line_count, mixerator(path_results, line_results, 2), done
         else:
             is_line_query = any(f.domain == LINE for f in

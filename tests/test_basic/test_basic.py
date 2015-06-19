@@ -8,7 +8,7 @@ class BasicTests(DxrInstanceTestCase):
 
     def test_text(self):
         """Assert that a plain text search works."""
-        self.found_files_eq('main', ['main.c', 'makefile'])
+        self.found_files_eq('line:main', ['main.c', 'makefile'])
 
     def test_and(self):
         """Finding 2 words should find only the lines that contain both."""
@@ -47,7 +47,7 @@ class BasicTests(DxrInstanceTestCase):
         results = self.search_results(
             'path:makefile -CODE', is_case_sensitive=False)
         eq_(results,
-            [{"path": "makefile",
+            [{"path": "<b>makefile</b>",
               "lines": [
                 {"line_number": 3,
                   "line": "$(CXX) -o $@ $^"},
@@ -62,7 +62,7 @@ class BasicTests(DxrInstanceTestCase):
         This tests trilite's isubstr-extents query type.
 
         """
-        self.found_files_eq('MAIN',
+        self.found_files_eq('line:MAIN',
                             ['main.c', 'makefile'],
                             is_case_sensitive=False)
 
@@ -79,7 +79,7 @@ class BasicTests(DxrInstanceTestCase):
 
         """
         eq_(self.search_results('path:makefile'),
-            [{"path": "makefile",
+            [{"path": "<b>makefile</b>",
               "lines": [],
               "icon": "unknown",
               "is_binary": False}])

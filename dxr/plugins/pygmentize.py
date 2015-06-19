@@ -111,3 +111,4 @@ class FileToSkim(dxr.indexers.FileToSkim):
             return _regions_for_contents(lexer, self.contents)
         return []
 
+# TODO next: add a search-by-color filter?

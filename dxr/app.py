@@ -112,8 +112,9 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
                                                               'case': 'true' if
                                                               is_case_sensitive else 'false'}))
                             + '#{}'.format(line)})
+    # TODO next: consider coloring search results
     try:
-        count, results, done = query.results(offset, limit)
+        count, results, is_done = query.results(offset, limit)
         # Convert to dicts for ease of manipulation in JS:
         results = [{'icon': icon,
                     'path': path,
@@ -123,11 +124,12 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
     except BadTerm as exc:
         return jsonify({'error_html': exc.reason, 'error_level': 'warning'}), 400
 
+    # TODO next: consider to have some kind of stats result
     return jsonify({
         'www_root': config.www_root,
         'tree': tree,
         'results': results,
-        'done': done,
+        'is_done': is_done,
         'result_count': count,
         'result_count_formatted': format_number(count),
         'tree_tuples': _tree_tuples(query_text, is_case_sensitive)})

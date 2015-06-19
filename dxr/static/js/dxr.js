@@ -325,7 +325,7 @@ $(function() {
             case: data.is_case_sensitive
         };
         data.query_string = $.param(params);
-        resultsDone = data.done;
+        resultsDone = data.is_done;
 
         // If no data is returned, inform the user.
         if (!data.results.length) {
