@@ -1,12 +1,85 @@
-from os.path import basename, dirname, join, relpath
+from cStringIO import StringIO
 
+from os.path import basename, join, relpath, dirname
 from flask import url_for
 
 import dxr.indexers
 from dxr.indexers import Ref
 from dxr.utils import cd
+
 # TODO next: import dynamically from a provided directory so we don't have to maintain this.
-from idlparser.xpidl import IDLParser
+from idlparser.xpidl import IDLParser, Attribute
+#  _____
+# < lol >
+#  -----
+#         \   ^__^
+#          \  (oo)\_______
+#             (__)\       )\/\
+#                 ||----w |
+#                 ||     ||
+from idlparser.header import idl_basename, header, include, jsvalue_include, \
+    infallible_includes, header_end, forward_decl, write_interface, printComments
+
+
+def start_extent(name, line, col=0):
+    """Return the last column on which we can find name - col."""
+    return line.rfind(name) - col
+
+def number_lines(text):
+    return len(text.splitlines())
+
+def header_line_numbers(idl, filename):
+    """Map each production to its line number in the header."""
+    # Basically I replace all fd.write in print_header with line increments
+    production_map = {}
+    line = number_lines(header % {'filename': filename,
+                                  'basename': idl_basename(filename)}) + 1
+
+    foundinc = False
+    for inc in idl.includes():
+        if not foundinc:
+            foundinc = True
+            line += 1
+        line += number_lines(include % {'basename': idl_basename(inc.filename)})
+
+    if idl.needsJSTypes():
+        line += number_lines(jsvalue_include)
+
+    # Include some extra files if any attributes are infallible.
+    for iface in [p for p in idl.productions if p.kind == 'interface']:
+        for attr in [m for m in iface.members if isinstance(m, Attribute)]:
+            if attr.infallible:
+                line += number_lines(infallible_includes)
+                break
+
+    line += number_lines(header_end) + 1
+
+    for p in idl.productions:
+        production_map[p] = line
+        if p.kind == 'include': continue
+        if p.kind == 'cdata':
+            line += number_lines(p.data)
+            continue
+
+        if p.kind == 'forward':
+            line += number_lines(forward_decl % {'name': p.name})
+            continue
+        if p.kind == 'interface':
+            # Write_interface inserts a blank line at the start.
+            production_map[p] += 1
+            # Eh....
+            fd = StringIO()
+            write_interface(p, fd)
+            line += len(fd.readlines())
+            continue
+        if p.kind == 'typedef':
+            fd = StringIO()
+            printComments(fd, p.doccomments, '')
+            line += len(fd.readlines())
+            line += number_lines("typedef %s %s;\n\n" % (p.realtype.nativeType('in'),
+                                             p.name))
+
+    return production_map
 
 
 class FileToIndex(dxr.indexers.FileToIndex):
@@ -15,16 +88,15 @@ class FileToIndex(dxr.indexers.FileToIndex):
         super(FileToIndex, self).__init__(path, contents, plugin_name, tree)
         # TODO next: expose in config option
         self.header_bucket = relpath(join(tree.object_folder, "dist", "include"), tree.source_folder)
-        # TODO next: put this in TreeToIndex so we stop regenerating all the files each time
-        # or are we? is the cache taking care of things? should check.
         self.parser = IDLParser(self.tree.object_folder)
         # Hold on to the URL so we do not have to regenerate it everywhere.
-        header_filename = basename(self.path.replace('.idl', '.h'))
-        header_path = join(self.header_bucket, header_filename)
+        self.header_filename = basename(self.path.replace('.idl', '.h'))
+        header_path = join(self.header_bucket, self.header_filename)
         self.generated_url = url_for('.browse',
                                      tree=self.tree.name,
                                      path=header_path)
         self._idl = None
+        self._line_map = None
 
     @property
     def idl(self):
@@ -36,13 +108,18 @@ class FileToIndex(dxr.indexers.FileToIndex):
                 self._idl.resolve('.', self.parser)
         return self._idl
 
+    @property
+    def line_map(self):
+        if not self._line_map:
+            self._line_map = header_line_numbers(self.idl, self.header_filename)
+        return self._line_map
+
     def is_interesting(self):
         # TODO next: consider adding a link from generated headers back to the idl
         return self.path.endswith('.idl')
 
     def links(self):
-        header_filename = basename(self.path.replace('.idl', '.h'))
-        yield (3, 'IDL', [('idl-header', header_filename, self.generated_url)])
+        yield (3, 'IDL', [('idl-header', self.header_filename, self.generated_url)])
 
     def refs(self):
         def visit_interface(interface):
@@ -51,7 +128,9 @@ class FileToIndex(dxr.indexers.FileToIndex):
             for member in interface.members:
                 member.location.resolve()
                 if member.kind == 'const':
-                    start = member.location._lexpos + member.location._line.rfind(member.name)
+                    start = member.location._lexpos + start_extent(member.name,
+                                                                   member.location._line,
+                                                                   member.location._colno)
                     yield start, start + len(member.name), Ref([{
                         'html': 'See generated source',
                         'title': 'Go to the definition in the C++ header file.',
@@ -72,7 +151,9 @@ class FileToIndex(dxr.indexers.FileToIndex):
             if item.kind == 'include':
                 filename = item.filename
                 item.location.resolve()
-                start = item.location._lexpos + item.location._line.rfind(filename)
+                start = item.location._lexpos + start_extent(filename,
+                                                             item.location._line,
+                                                             item.location._colno)
                 yield start, start + len(filename), Ref([{
                     'html':   'Jump to file',
                     'title':  'Go to the target of the include statement',
@@ -81,14 +162,26 @@ class FileToIndex(dxr.indexers.FileToIndex):
                 }])
             elif item.kind == 'typedef':
                 item.location.resolve()
-                start = item.location._lexpos + item.location._line.rfind(item.name)
+                start = item.location._lexpos + start_extent(item.name,
+                                                             item.location._line,
+                                                             item.location._colno)
                 yield start, start + len(item.name), Ref([{
                     'html':   'See generated source',
                     'title':  'Go to the typedef in the C++ header file',
-                    'href':   self.generated_url,
+                    'href':   self.generated_url + '#%d' % self.line_map[item],
                     'icon':   'type'
                 }])
             elif item.kind == 'interface':
+                # TODO next: Yield someothing for the interface itself.
+                item.location.resolve()
+                start = item.location._lexpos + start_extent(item.name, item.location._line,
+                                                             item.location._colno)
+                yield start, start + len(item.name), Ref([{
+                    'html':   'See generated source',
+                    'title':  'Go to the declaration in the C++ header file',
+                    'href':   self.generated_url + '#%d' % self.line_map[item],
+                    'icon':   'class'
+                }])
                 for ref in visit_interface(item):
                     yield ref
             elif item.kind in {'builtin', 'cdata', 'native', 'attribute', 'forward', 'attribute'}:
