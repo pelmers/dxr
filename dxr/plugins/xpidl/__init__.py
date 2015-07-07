@@ -21,9 +21,9 @@ from idlparser.header import idl_basename, header, include, jsvalue_include, \
     infallible_includes, header_end, forward_decl, write_interface, printComments
 
 
-def start_extent(name, line, col=0):
-    """Return the last column on which we can find name - col."""
-    return line.rfind(name) - col
+def start_extent(name, location):
+    """Return the last byte position on which we can find name in the location's line."""
+    return location._line.rfind(name) - location._colno + location._lexpos
 
 def number_lines(text):
     return len(text.splitlines())
@@ -128,9 +128,7 @@ class FileToIndex(dxr.indexers.FileToIndex):
             for member in interface.members:
                 member.location.resolve()
                 if member.kind == 'const':
-                    start = member.location._lexpos + start_extent(member.name,
-                                                                   member.location._line,
-                                                                   member.location._colno)
+                    start = start_extent(member.name, member.location)
                     yield start, start + len(member.name), Ref([{
                         'html': 'See generated source',
                         'title': 'Go to the definition in the C++ header file.',
@@ -151,9 +149,7 @@ class FileToIndex(dxr.indexers.FileToIndex):
             if item.kind == 'include':
                 filename = item.filename
                 item.location.resolve()
-                start = item.location._lexpos + start_extent(filename,
-                                                             item.location._line,
-                                                             item.location._colno)
+                start = start_extent(filename, item.location)
                 yield start, start + len(filename), Ref([{
                     'html':   'Jump to file',
                     'title':  'Go to the target of the include statement',
@@ -162,9 +158,7 @@ class FileToIndex(dxr.indexers.FileToIndex):
                 }])
             elif item.kind == 'typedef':
                 item.location.resolve()
-                start = item.location._lexpos + start_extent(item.name,
-                                                             item.location._line,
-                                                             item.location._colno)
+                start = start_extent(item.name, item.location)
                 yield start, start + len(item.name), Ref([{
                     'html':   'See generated source',
                     'title':  'Go to the typedef in the C++ header file',
@@ -174,8 +168,7 @@ class FileToIndex(dxr.indexers.FileToIndex):
             elif item.kind == 'interface':
                 # TODO next: Yield someothing for the interface itself.
                 item.location.resolve()
-                start = item.location._lexpos + start_extent(item.name, item.location._line,
-                                                             item.location._colno)
+                start = start_extent(item.name, item.location)
                 yield start, start + len(item.name), Ref([{
                     'html':   'See generated source',
                     'title':  'Go to the declaration in the C++ header file',
@@ -184,9 +177,16 @@ class FileToIndex(dxr.indexers.FileToIndex):
                 }])
                 for ref in visit_interface(item):
                     yield ref
-            elif item.kind in {'builtin', 'cdata', 'native', 'attribute', 'forward', 'attribute'}:
-                # Don't do anything for these kinds of items.
-                # TODO: can we do something useful for these?
-                continue
+            elif item.kind == 'forward':
+                item.location.resolve()
+                start = start_extent(item.name, item.location)
+                yield start, start + len(item.name), Ref([{
+                    'html':   'See generated source',
+                    'title':  'Go to the declaration in the C++ header file',
+                    'href':   self.generated_url + '#%d' % self.line_map[item],
+                    'icon':   'class'
+                }])
+            # TODO: can we do something useful for these?
+            # Unhandled kinds: {'builtin', 'cdata', 'native', 'attribute', 'forward', 'attribute'}
 
 # TODO next: expose plugin with option for configuring source directory.
