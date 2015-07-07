@@ -6,7 +6,7 @@ from dxr.testing import DxrInstanceTestCase
 import os
 
 class IdlTests(DxrInstanceTestCase):
-    """Test indexing of Rust projects"""
+    """Test indexing of an IDL file"""
 
     def test_nothing(self):
         """A null test just to make the setup method run"""

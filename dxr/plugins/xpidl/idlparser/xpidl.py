@@ -219,7 +219,7 @@ class NameMap(object):
             raise IDLError("Name '%s' not found", location)
 
 class IDLError(Exception):
-    def __init__(self, message, location, warning=False):
+    def __init__(self, message='', location='', warning=False):
         self.message = message
         self.location = location
         self.warning = warning
@@ -254,7 +254,7 @@ class Include(object):
             parent.deps.extend(self.IDL.deps)
             return
 
-        raise IDLError("File '%s' not found" % self.filename, self.location)
+        raise IDLError("File '%s' not found in %s" % (self.filename, list(incfiles())), self.location)
 
 class IDL(object):
     def __init__(self, productions):

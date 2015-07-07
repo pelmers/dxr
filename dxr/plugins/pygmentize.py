@@ -1,6 +1,6 @@
 from os.path import basename
 
-from pygments.lexers import get_lexer_for_filename, JavascriptLexer
+from pygments.lexers import get_lexer_for_filename, JavascriptLexer, PythonLexer
 from pygments.lexer import inherit
 from pygments.token import Token, Comment
 from pygments.util import ClassNotFound
@@ -69,6 +69,8 @@ def _lexer_for_filename(filename):
         # Use a custom lexer for js/jsm files to highlight prepocessor
         # directives
         lexer = JavascriptPreprocLexer()
+    elif filename == 'moz.build':
+        lexer = PythonLexer()
     else:
         try:
             # Lex .h files as C++ so occurrences of "class" and such get colored;
