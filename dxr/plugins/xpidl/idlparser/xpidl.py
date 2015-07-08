@@ -247,6 +247,7 @@ class Include(object):
         for file in incfiles():
             if not os.path.exists(file): continue
 
+            self.resolved_path = file
             self.IDL = parent.parser.parse(open(file).read(), filename=file)
             self.IDL.resolve(parent.incdirs, parent.parser)
             for type in self.IDL.getNames():

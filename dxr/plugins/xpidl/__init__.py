@@ -1,14 +1,19 @@
 from cStringIO import StringIO
+from functools import partial
 
-from os.path import basename, join, relpath, dirname
+from os.path import basename, join, relpath, dirname, abspath
 from flask import url_for
 
+from schema import Optional, Use, And
+
+from dxr.config import AbsPath
 import dxr.indexers
 from dxr.indexers import Ref
+from dxr.plugins import Plugin, AdHocTreeToIndex
 from dxr.utils import cd, search_url
+from idlparser.xpidl import IDLParser, Attribute, IDLError
 
-# TODO next: import dynamically from a provided directory so we don't have to maintain this.
-from idlparser.xpidl import IDLParser, Attribute
+
 #  _____
 # < lol >
 #  -----
@@ -20,9 +25,13 @@ from idlparser.xpidl import IDLParser, Attribute
 from idlparser.header import idl_basename, header, include, jsvalue_include, \
     infallible_includes, header_end, forward_decl, write_interface, printComments
 
+PLUGIN_NAME = 'xpidl'
 
 def start_extent(name, location):
-    """Return the last byte position on which we can find name in the location's line."""
+    """Return the last byte position on which we can find name in the
+    location's line, resolving if necessary."""
+
+    location.resolve()
     return location._line.rfind(name) - location._colno + location._lexpos
 
 def number_lines(text):
@@ -56,23 +65,18 @@ def header_line_numbers(idl, filename):
 
     for p in idl.productions:
         production_map[p] = line
-        if p.kind == 'include': continue
         if p.kind == 'cdata':
             line += number_lines(p.data)
-            continue
-
-        if p.kind == 'forward':
+        elif p.kind == 'forward':
             line += number_lines(forward_decl % {'name': p.name})
-            continue
-        if p.kind == 'interface':
+        elif p.kind == 'interface':
             # Write_interface inserts a blank line at the start.
             production_map[p] += 1
             # Eh....
             fd = StringIO()
             write_interface(p, fd)
             line += len(fd.readlines())
-            continue
-        if p.kind == 'typedef':
+        elif p.kind == 'typedef':
             fd = StringIO()
             printComments(fd, p.doccomments, '')
             line += len(fd.readlines())
@@ -86,37 +90,31 @@ class FileToIndex(dxr.indexers.FileToIndex):
 
     def __init__(self, path, contents, plugin_name, tree):
         super(FileToIndex, self).__init__(path, contents, plugin_name, tree)
-        # TODO next: expose in config option
-        self.header_bucket = relpath(join(tree.object_folder, "dist", "include"), tree.source_folder)
-        self.parser = IDLParser(self.tree.object_folder)
+        self.temp_folder = join(self.tree.temp_folder, 'plugins', PLUGIN_NAME)
+        self.parser = IDLParser(self.temp_folder)
         # Hold on to the URL so we do not have to regenerate it everywhere.
         self.header_filename = basename(self.path.replace('.idl', '.h'))
-        header_path = join(self.header_bucket, self.header_filename)
+        header_path = relpath(join(self.plugin_config.header_bucket, self.header_filename),
+                              self.tree.source_folder)
         self.generated_url = url_for('.browse',
                                      tree=self.tree.name,
                                      path=header_path)
-        self._idl = None
-        self._line_map = None
+        self.idl = None
+        self.line_map = None
 
-    @property
-    def idl(self):
-        """Return the AST."""
+    def resolve(self):
+        """Parse the IDL file and resolve deps."""
 
-        if not self._idl:
-            with cd(dirname(self.absolute_path())):
-                self._idl = self.parser.parse(self.contents, basename(self.path))
-                # TODO next: expose include dirs as config option
-                self._idl.resolve(['.'], self.parser)
-        return self._idl
-
-    @property
-    def line_map(self):
-        if not self._line_map:
-            self._line_map = header_line_numbers(self.idl, self.header_filename)
-        return self._line_map
+        with cd(dirname(self.absolute_path())):
+            self.idl = self.parser.parse(self.contents, basename(self.path))
+            try:
+                self.idl.resolve(self.plugin_config.include_folders, self.parser)
+            except IDLError as e:
+                print e
+        self.line_map = header_line_numbers(self.idl, self.header_filename)
 
     def is_interesting(self):
-        # TODO next: consider adding a link from generated headers back to the idl
+        # TODO next next: consider adding a link from generated headers back to the idl
         return self.path.endswith('.idl')
 
     def links(self):
@@ -124,10 +122,7 @@ class FileToIndex(dxr.indexers.FileToIndex):
 
     def refs(self):
         def visit_interface(interface):
-            # TODO next: anchor these to the right line number using header.py
-            # TODO next: some sort of c++ source map?
             for member in interface.members:
-                member.location.resolve()
                 if member.kind == 'const':
                     start = start_extent(member.name, member.location)
                     yield start, start + len(member.name), Ref([{
@@ -145,20 +140,23 @@ class FileToIndex(dxr.indexers.FileToIndex):
                         'icon': 'method'
                     }])
 
-        # also create links for "include" etc.
+        self.resolve()
+        if not self.idl:
+            # Then we could not resolve the idl file, do not continue.
+            raise StopIteration
         for item in self.idl.productions:
             if item.kind == 'include':
                 filename = item.filename
-                item.location.resolve()
                 start = start_extent(filename, item.location)
+                print item.resolved_path
                 yield start, start + len(filename), Ref([{
                     'html':   'Jump to file',
                     'title':  'Go to the target of the include statement',
-                    'href':   url_for('.browse', tree=self.tree.name, path=filename),
-                    'icon':   'jump'
+                    'href': url_for('.browse', tree=self.tree.name,
+                                    path=relpath(item.resolved_path, self.tree.source_folder)),
+                    'icon': 'jump'
                 }])
             elif item.kind == 'typedef':
-                item.location.resolve()
                 start = start_extent(item.name, item.location)
                 yield start, start + len(item.name), Ref([{
                     'html':   'See generated source',
@@ -167,12 +165,10 @@ class FileToIndex(dxr.indexers.FileToIndex):
                     'icon':   'type'
                 }])
             elif item.kind == 'interface':
-                # TODO next: yield for the extended class
-                item.location.resolve()
                 start = start_extent(item.name, item.location)
                 if item.base:
+                    # The interface that this one extends.
                     base_start = start_extent(item.base, item.location)
-                    print base_start
                     yield base_start, base_start + len(item.base), Ref([{
                         'html':   'Find declaration',
                         'title':  'Search for the declaration of this superclass',
@@ -188,7 +184,6 @@ class FileToIndex(dxr.indexers.FileToIndex):
                 for ref in visit_interface(item):
                     yield ref
             elif item.kind == 'forward':
-                item.location.resolve()
                 start = start_extent(item.name, item.location)
                 yield start, start + len(item.name), Ref([{
                     'html':   'See generated source',
@@ -199,4 +194,21 @@ class FileToIndex(dxr.indexers.FileToIndex):
             # TODO: can we do something useful for these?
             # Unhandled kinds: {'builtin', 'cdata', 'native', 'attribute', 'forward', 'attribute'}
 
-# TODO next: expose plugin with option for configuring source directory.
+# TODO next: export needles definitions so we can do a structured queries
+# TODO next: structured query ideas -- interface and method declarations
+# TODO next: create a real python module out of idlparser/
+    # TODO next: anchor methods to the right line number using header.py
+# TODO next next: automatically read moz.build files to get include directories
+
+ColonPathList = And(basestring,
+                    Use(lambda value: value.strip().split(':')),
+                    Use(lambda paths: map(abspath, paths)),
+                    error='This should be a colon-separated list of paths.')
+
+plugin = Plugin(
+    tree_to_index=partial(AdHocTreeToIndex,
+                          file_to_index_class=FileToIndex),
+    config_schema={
+        'header_bucket': AbsPath,
+        Optional('include_folders', default=[]): ColonPathList})
+
