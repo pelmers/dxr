@@ -92,6 +92,7 @@ class FileToIndex(dxr.indexers.FileToIndex):
         super(FileToIndex, self).__init__(path, contents, plugin_name, tree)
         self.temp_folder = join(self.tree.temp_folder, 'plugins', PLUGIN_NAME)
         self.parser = IDLParser(self.temp_folder)
+        self.dirname = dirname(self.absolute_path())
         # Hold on to the URL so we do not have to regenerate it everywhere.
         self.header_filename = basename(self.path.replace('.idl', '.h'))
         header_path = relpath(join(self.plugin_config.header_bucket, self.header_filename),
@@ -105,12 +106,11 @@ class FileToIndex(dxr.indexers.FileToIndex):
     def resolve(self):
         """Parse the IDL file and resolve deps."""
 
-        with cd(dirname(self.absolute_path())):
-            self.idl = self.parser.parse(self.contents, basename(self.path))
-            try:
-                self.idl.resolve(self.plugin_config.include_folders, self.parser)
-            except IDLError as e:
-                print e
+        self.idl = self.parser.parse(self.contents, basename(self.path))
+        try:
+            self.idl.resolve([self.dirname] + self.plugin_config.include_folders, self.parser)
+        except IDLError as e:
+            print e
         self.line_map = header_line_numbers(self.idl, self.header_filename)
 
     def is_interesting(self):
@@ -121,22 +121,48 @@ class FileToIndex(dxr.indexers.FileToIndex):
         yield (3, 'IDL', [('idl-header', self.header_filename, self.generated_url)])
 
     def refs(self):
+        def generated_menu(production):
+            # Return a menu for jumping to corresponding C++ source using the line map.
+            return {
+                'html':   'See generated source',
+                'title':  'Go to this line in the generated C++ header file',
+                'href':   self.generated_url + '#%d' % self.line_map[production],
+                'icon':   'class'
+            }
+
         def visit_interface(interface):
+            # Yield refs for the members, methods, etc. of an interface (and the interface itself).
+            start = start_extent(interface.name, interface.location)
+            if interface.base:
+                # The interface that this one extends.
+                base_start = start_extent(interface.base, interface.location)
+                yield base_start, base_start + len(interface.base), Ref([{
+                    'html':   'Find declaration',
+                    'title':  'Search for the declaration of this class',
+                    'href':   search_url(self.tree, 'type-decl:%s' % interface.base),
+                    'icon':   'type'
+                }])
+            yield start, start + len(interface.name), Ref([{
+                'html':   'Find subclasses',
+                'title':  'Search for children that derive this interface.',
+                'href':   search_url(self.tree, 'derived:%s' % interface.name),
+                'icon':   'class'
+            }, generated_menu(interface)])
             for member in interface.members:
                 if member.kind == 'const':
                     start = start_extent(member.name, member.location)
                     yield start, start + len(member.name), Ref([{
-                        'html': 'See generated source',
-                        'title': 'Go to the definition in the C++ header file.',
-                        'href': self.generated_url,
+                        'html': 'Find declarations',
+                        'title': 'Search for declarations of this constant.',
+                        'href': search_url(self.tree, "var:%s" % member.name),
                         'icon': 'field'
                     }])
                 elif member.kind == 'method':
                     start = member.location._lexpos
                     yield start, start + len(member.name), Ref([{
-                        'html': 'See generated source',
-                        'title': 'Go to the declaration in the C++ header file.',
-                        'href': self.generated_url,
+                        'html': 'Find implementations',
+                        'title': 'Search for implementations of this method',
+                        'href': search_url(self.tree, "function:%s" % member.name),
                         'icon': 'method'
                     }])
 
@@ -148,7 +174,6 @@ class FileToIndex(dxr.indexers.FileToIndex):
             if item.kind == 'include':
                 filename = item.filename
                 start = start_extent(filename, item.location)
-                print item.resolved_path
                 yield start, start + len(filename), Ref([{
                     'html':   'Jump to file',
                     'title':  'Go to the target of the include statement',
@@ -158,47 +183,15 @@ class FileToIndex(dxr.indexers.FileToIndex):
                 }])
             elif item.kind == 'typedef':
                 start = start_extent(item.name, item.location)
-                yield start, start + len(item.name), Ref([{
-                    'html':   'See generated source',
-                    'title':  'Go to the typedef in the C++ header file',
-                    'href':   self.generated_url + '#%d' % self.line_map[item],
-                    'icon':   'type'
-                }])
-            elif item.kind == 'interface':
-                start = start_extent(item.name, item.location)
-                if item.base:
-                    # The interface that this one extends.
-                    base_start = start_extent(item.base, item.location)
-                    yield base_start, base_start + len(item.base), Ref([{
-                        'html':   'Find declaration',
-                        'title':  'Search for the declaration of this superclass',
-                        'href':   search_url(self.tree, '"interface %s" ext:idl' % item.base),
-                        'icon':   'type'
-                    }])
-                yield start, start + len(item.name), Ref([{
-                    'html':   'See generated source',
-                    'title':  'Go to the declaration in the C++ header file',
-                    'href':   self.generated_url + '#%d' % self.line_map[item],
-                    'icon':   'class'
-                }])
-                for ref in visit_interface(item):
-                    yield ref
+                yield start, start + len(item.name), Ref([generated_menu(item)])
             elif item.kind == 'forward':
                 start = start_extent(item.name, item.location)
-                yield start, start + len(item.name), Ref([{
-                    'html':   'See generated source',
-                    'title':  'Go to the declaration in the C++ header file',
-                    'href':   self.generated_url + '#%d' % self.line_map[item],
-                    'icon':   'class'
-                }])
+                yield start, start + len(item.name), Ref([generated_menu(item)])
+            elif item.kind == 'interface':
+                for ref in visit_interface(item):
+                    yield ref
             # TODO: can we do something useful for these?
             # Unhandled kinds: {'builtin', 'cdata', 'native', 'attribute', 'forward', 'attribute'}
-
-# TODO next: export needles definitions so we can do a structured queries
-# TODO next: structured query ideas -- interface and method declarations
-# TODO next: create a real python module out of idlparser/
-    # TODO next: anchor methods to the right line number using header.py
-# TODO next next: automatically read moz.build files to get include directories
 
 ColonPathList = And(basestring,
                     Use(lambda value: value.strip().split(':')),
@@ -212,3 +205,8 @@ plugin = Plugin(
         'header_bucket': AbsPath,
         Optional('include_folders', default=[]): ColonPathList})
 
+
+# TODO next: export needles definitions so we can do a structured queries
+# TODO next: structured query ideas -- interface and method declarations, deriving interfaces
+# TODO next: create a real python module out of idlparser/
+# TODO next next: automatically read moz.build files to get include directories
