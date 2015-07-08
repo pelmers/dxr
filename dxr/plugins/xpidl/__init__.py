@@ -5,7 +5,7 @@ from flask import url_for
 
 import dxr.indexers
 from dxr.indexers import Ref
-from dxr.utils import cd
+from dxr.utils import cd, search_url
 
 # TODO next: import dynamically from a provided directory so we don't have to maintain this.
 from idlparser.xpidl import IDLParser, Attribute
@@ -105,7 +105,8 @@ class FileToIndex(dxr.indexers.FileToIndex):
         if not self._idl:
             with cd(dirname(self.absolute_path())):
                 self._idl = self.parser.parse(self.contents, basename(self.path))
-                self._idl.resolve('.', self.parser)
+                # TODO next: expose include dirs as config option
+                self._idl.resolve(['.'], self.parser)
         return self._idl
 
     @property
@@ -166,9 +167,18 @@ class FileToIndex(dxr.indexers.FileToIndex):
                     'icon':   'type'
                 }])
             elif item.kind == 'interface':
-                # TODO next: Yield someothing for the interface itself.
+                # TODO next: yield for the extended class
                 item.location.resolve()
                 start = start_extent(item.name, item.location)
+                if item.base:
+                    base_start = start_extent(item.base, item.location)
+                    print base_start
+                    yield base_start, base_start + len(item.base), Ref([{
+                        'html':   'Find declaration',
+                        'title':  'Search for the declaration of this superclass',
+                        'href':   search_url(self.tree, '"interface %s" ext:idl' % item.base),
+                        'icon':   'type'
+                    }])
                 yield start, start + len(item.name), Ref([{
                     'html':   'See generated source',
                     'title':  'Go to the declaration in the C++ header file',

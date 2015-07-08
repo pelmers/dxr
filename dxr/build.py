@@ -205,7 +205,7 @@ def index_tree(tree, es, verbose=False):
     skip_cleanup  = skip_indexing or skip_build
 
     # Create and/or clear out folders:
-    ensure_folder(tree.object_folder, tree.source_folder != tree.object_folder)
+    #ensure_folder(tree.object_folder, tree.source_folder != tree.object_folder)
     ensure_folder(tree.temp_folder, not skip_cleanup)
     ensure_folder(tree.log_folder, not skip_cleanup)
     ensure_folder(join(tree.temp_folder, 'plugins'), not skip_cleanup)
