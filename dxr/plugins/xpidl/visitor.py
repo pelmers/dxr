@@ -35,6 +35,7 @@ def make_extent(name, location):
 
     location.resolve()
     start_col = location._line.rfind(name) - location._colno
+    # the AST's line numbers are 0-based, but DXR expects 1-based lines.
     return Extent(Position(location._lineno + 1, start_col),
                   Position(location._lineno + 1, start_col + len(name)))
 
@@ -123,8 +124,7 @@ class IdlVisitor(object):
             elif item.kind == 'interface':
                 self.visit_interface(item)
             # TODO: can we do something useful for these?
-            # Unhandled kinds: {'builtin', 'cdata', 'native', 'attribute', 'forward',
-            # 'attribute'}
+            # Unhandled: {'builtin', 'cdata', 'native', 'attribute', 'forward', 'attribute'}
 
     def yield_needle(self, name, mapping, extent):
         self.needles.append((PLUGIN_NAME + '_' + name, mapping, extent))
@@ -167,8 +167,6 @@ class IdlVisitor(object):
             'icon': 'jump'
         }
 
-    # TODO next: needle notes --
-    # interface: type-decl, subclassing: derived, methods: function-decl, constants: var-decl
     def visit_interface(self, interface):
         # Yield refs for the members, methods, etc. of an interface (and the interface itself).
         start = start_pos(interface.name, interface.location)

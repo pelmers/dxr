@@ -57,6 +57,7 @@ class FileToIndex(dxr.indexers.FileToIndex):
 
     def is_interesting(self):
         # TODO next next: consider adding a link from generated headers back to the idl
+        # TODO next next next: javascript support/????
         return self.path.endswith('.idl')
 
     def links(self):
@@ -70,9 +71,12 @@ class FileToIndex(dxr.indexers.FileToIndex):
         return iterable_per_line(
             with_start_and_end(split_into_lines(self.idl.needles if self.idl else [])))
 
+
+def split_on_colon_into_abspaths(value):
+    return map(abspath, value.strip().split(':'))
+
 ColonPathList = And(basestring,
-                    Use(lambda value: value.strip().split(':')),
-                    Use(lambda paths: map(abspath, paths)),
+                    Use(split_on_colon_into_abspaths),
                     error='This should be a colon-separated list of paths.')
 
 mappings = {
@@ -96,7 +100,4 @@ plugin = Plugin(
         Optional('include_folders', default=[]): ColonPathList})
 
 
-# TODO next: export needles definitions so we can do a structured queries
-# TODO next: structured query ideas -- interface and method declarations, deriving interfaces
 # TODO next: create a real python module out of idlparser/
-# TODO next next: automatically read moz.build files to get include directories
