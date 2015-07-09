@@ -1,11 +1,13 @@
 from cStringIO import StringIO
-from dxr.indexers import Ref
-from dxr.plugins.xpidl.idlparser.xpidl import Attribute
 
 from flask import url_for
 from os.path import relpath, join, basename, dirname
 
+from dxr.indexers import Ref, Extent, Position
+from dxr.plugins.xpidl.idlparser.xpidl import Attribute
+
 from dxr.utils import search_url
+
 #  _____
 # < lol >
 #  -----
@@ -17,12 +19,25 @@ from dxr.utils import search_url
 from idlparser.header import idl_basename, header, include, jsvalue_include, \
     infallible_includes, header_end, forward_decl, write_interface, printComments
 
-def start_extent(name, location):
+PLUGIN_NAME = 'xpidl'
+
+
+def start_pos(name, location):
     """Return the last byte position on which we can find name in the
     location's line, resolving if necessary."""
 
     location.resolve()
     return location._line.rfind(name) - location._colno + location._lexpos
+
+
+def make_extent(name, location):
+    """Return an Extent for the given name in this Location."""
+
+    location.resolve()
+    start_col = location._line.rfind(name) - location._colno
+    return Extent(Position(location._lineno + 1, start_col),
+                  Position(location._lineno + 1, start_col + len(name)))
+
 
 def header_line_numbers(idl, filename):
     """Map each production to its line number in the header."""
@@ -60,7 +75,7 @@ def header_line_numbers(idl, filename):
         elif p.kind == 'forward':
             line += number_lines(forward_decl % {'name': p.name})
         elif p.kind == 'interface':
-            # Write_interface inserts a blank line at the start.
+            # write_interface inserts a blank line at the start.
             production_map[p] += 1
             # Eh....
             fd = StringIO()
@@ -71,14 +86,16 @@ def header_line_numbers(idl, filename):
             printComments(fd, p.doccomments, '')
             line += len(fd.readlines())
             line += number_lines("typedef %s %s;\n\n" % (p.realtype.nativeType('in'),
-                                             p.name))
+                                                         p.name))
 
     return production_map
+
 
 class IdlVisitor(object):
     """Traverse an IDL syntax tree and collect refs and needles."""
 
-    def __init__(self, parser, contents, rel_path, abs_path, include_folders, header_bucket, tree_config):
+    def __init__(self, parser, contents, rel_path, abs_path, include_folders, header_bucket,
+                 tree_config):
         self.tree = tree_config
         # Hold on to the URL so we do not have to regenerate it everywhere.
         self.header_filename = basename(rel_path.replace('.idl', '.h'))
@@ -93,7 +110,6 @@ class IdlVisitor(object):
         self.line_map = header_line_numbers(self.ast, self.header_filename)
         # List of (start, end, Ref) where start and end are byte offsets into the file.
         self.refs = []
-        # TODO next: needles
         self.needles = []
 
         # Initiate visitations.
@@ -107,7 +123,17 @@ class IdlVisitor(object):
             elif item.kind == 'interface':
                 self.visit_interface(item)
             # TODO: can we do something useful for these?
-            # Unhandled kinds: {'builtin', 'cdata', 'native', 'attribute', 'forward', 'attribute'}
+            # Unhandled kinds: {'builtin', 'cdata', 'native', 'attribute', 'forward',
+            # 'attribute'}
+
+    def yield_needle(self, name, mapping, extent):
+        self.needles.append((PLUGIN_NAME + '_' + name, mapping, extent))
+
+    def yield_name_needle(self, filter_name, name, location):
+        self.yield_needle(filter_name, {'name': name}, make_extent(name, location))
+
+    def yield_ref(self, start, end, menus):
+        self.refs.append((start, end, Ref(menus)))
 
     def generated_menu(self, production):
         # Return a menu for jumping to corresponding C++ source using the line map.
@@ -129,7 +155,8 @@ class IdlVisitor(object):
 
     def subclass_search_menu(self, name):
         return self.filtered_search_menu('derived', name, 'Find subclasses',
-                                         'Search for children that derive this interface.', 'class')
+                                         'Search for children that derive this interface.',
+                                         'class')
 
     def include_menu(self, item):
         return {
@@ -140,49 +167,56 @@ class IdlVisitor(object):
             'icon': 'jump'
         }
 
+    # TODO next: needle notes --
+    # interface: type-decl, subclassing: derived, methods: function-decl, constants: var-decl
     def visit_interface(self, interface):
         # Yield refs for the members, methods, etc. of an interface (and the interface itself).
-        start = start_extent(interface.name, interface.location)
+        start = start_pos(interface.name, interface.location)
         if interface.base:
             # The interface that this one extends.
-            base_start = start_extent(interface.base, interface.location)
-            self.refs.append((base_start, base_start + len(interface.base), Ref([
+            base_start = start_pos(interface.base, interface.location)
+            self.yield_ref(base_start, base_start + len(interface.base), [
                 self.filtered_search_menu('type-decl', interface.base, icon='type'),
                 self.subclass_search_menu(interface.base)
-            ])))
+            ])
+            self.yield_name_needle('derived', interface.base, interface.location)
 
-        self.refs.append((start, start + len(interface.name), Ref([
+        self.yield_ref(start, start + len(interface.name), [
             self.subclass_search_menu(interface.name),
             self.generated_menu(interface)
-        ])))
+        ])
+        self.yield_name_needle('type_decl', interface.name, interface.location)
 
         for member in interface.members:
             if member.kind == 'const':
-                start = start_extent(member.name, member.location)
-                self.refs.append((start, start + len(member.name), Ref([
+                start = start_pos(member.name, member.location)
+                self.yield_ref(start, start + len(member.name), [
                     self.filtered_search_menu('var', member.name, icon='field')
-                ])))
+                ])
+                self.yield_name_needle('var_decl', member.name, member.location)
+
             elif member.kind == 'method':
                 start = member.location._lexpos
-                self.refs.append((start, start + len(member.name), Ref([
+                self.yield_ref(start, start + len(member.name), [
                     self.filtered_search_menu('function', member.name, 'Find implementations',
-                                         'Search for implementations of this method', 'method')
-                ])))
+                                              'Search for implementations of this method',
+                                              'method')
+                ])
+                self.yield_name_needle('function_decl', member.name, member.location)
 
     def visit_include(self, item):
         filename = item.filename
-        start = start_extent(filename, item.location)
-        self.refs.append((start, start + len(filename), Ref([self.include_menu(item)])))
+        start = start_pos(filename, item.location)
+        self.yield_ref(start, start + len(filename), [self.include_menu(item)])
 
     def visit_typedef(self, item):
-        start = start_extent(item.name, item.location)
-        self.refs.append((start, start + len(item.name), Ref([self.generated_menu(item)])))
+        start = start_pos(item.name, item.location)
+        self.yield_ref(start, start + len(item.name), [self.generated_menu(item)])
 
     def visit_forward(self, item):
-        start = start_extent(item.name, item.location)
-        self.refs.append((start, start + len(item.name), Ref([
+        start = start_pos(item.name, item.location)
+        self.yield_ref(start, start + len(item.name), [
             self.filtered_search_menu('type-decl', item.name, icon='type'),
             self.subclass_search_menu(item.name),
             self.generated_menu(item)
-        ])))
-
+        ])

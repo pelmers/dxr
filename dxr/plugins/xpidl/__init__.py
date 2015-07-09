@@ -6,7 +6,7 @@ from schema import Optional, Use, And
 from dxr.config import AbsPath
 from dxr.filters import LINE
 import dxr.indexers
-from dxr.indexers import STRING_PROPERTY
+from dxr.indexers import STRING_PROPERTY, iterable_per_line, split_into_lines, with_start_and_end
 from dxr.plugins import Plugin, AdHocTreeToIndex, filters_from_namespace
 from dxr.plugins.xpidl import filters
 from dxr.plugins.xpidl.visitor import IdlVisitor
@@ -66,6 +66,10 @@ class FileToIndex(dxr.indexers.FileToIndex):
     def refs(self):
         return self.idl.refs if self.idl else []
 
+    def needles_by_line(self):
+        return iterable_per_line(
+            with_start_and_end(split_into_lines(self.idl.needles if self.idl else [])))
+
 ColonPathList = And(basestring,
                     Use(lambda value: value.strip().split(':')),
                     Use(lambda paths: map(abspath, paths)),
@@ -92,8 +96,6 @@ plugin = Plugin(
         Optional('include_folders', default=[]): ColonPathList})
 
 
-# needle notes --
-# interface: type-decl, subclassing: derived, methods: function-decl, constants: var-decl
 # TODO next: export needles definitions so we can do a structured queries
 # TODO next: structured query ideas -- interface and method declarations, deriving interfaces
 # TODO next: create a real python module out of idlparser/
