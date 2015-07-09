@@ -241,6 +241,9 @@ $(function() {
                 // we get redirected to the search page and lose the query so, if query is null,
                 // get the query from the input field.
                 query = query ? query : $.trim(queryField.val());
+                // Abort if there is no query; no reason to hit the server for nothing.
+                if (query.length === 0)
+                    return;
 
                 dataOffset += previousDataLimit;
                 previousDataLimit = defaultDataLimit;
