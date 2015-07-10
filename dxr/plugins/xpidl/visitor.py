@@ -1,10 +1,11 @@
 from cStringIO import StringIO
 
 from flask import url_for
+from itertools import ifilter
 from os.path import relpath, join, basename, dirname
-
+from os.path import exists
 from dxr.indexers import Ref, Extent, Position
-from dxr.plugins.xpidl.idlparser.xpidl import Attribute
+from xpidl.xpidl import Attribute
 from dxr.utils import search_url
 
 #  _____
@@ -15,7 +16,7 @@ from dxr.utils import search_url
 #             (__)\       )\/\
 #                 ||----w |
 #                 ||     ||
-from idlparser.header import idl_basename, header, include, jsvalue_include, \
+from xpidl.header import idl_basename, header, include, jsvalue_include, \
     infallible_includes, header_end, forward_decl, write_interface, printComments
 
 PLUGIN_NAME = 'xpidl'
@@ -107,7 +108,8 @@ class IdlVisitor(object):
                                      path=header_path)
         self.ast = parser.parse(contents, basename(rel_path))
         # Might raise IdlError
-        self.ast.resolve([dirname(abs_path)] + include_folders, parser)
+        self.search_paths = [dirname(abs_path)] + include_folders
+        self.ast.resolve(self.search_paths, parser)
         self.line_map = header_line_numbers(self.ast, self.header_filename)
         # List of (start, end, Ref) where start and end are byte offsets into the file.
         self.refs = []
@@ -158,12 +160,12 @@ class IdlVisitor(object):
                                          'Search for children that derive this interface.',
                                          'class')
 
-    def include_menu(self, item):
+    def include_menu(self, item_path):
         return {
             'html': 'Jump to file',
             'title': 'Go to the target of the include statement',
             'href': url_for('.browse', tree=self.tree.name,
-                            path=relpath(item.resolved_path, self.tree.source_folder)),
+                            path=relpath(item_path, self.tree.source_folder)),
             'icon': 'jump'
         }
 
@@ -208,7 +210,12 @@ class IdlVisitor(object):
     def visit_include(self, item):
         filename = item.filename
         start = start_pos(filename, item.location)
-        self.yield_ref(start, start + len(filename), [self.include_menu(item)])
+        # Remark: it would be nice if the Include class held on to this data after it does the
+        # same work.
+        # We know that the parser resolved the include it in the same way, so we assume we can
+        # too and take the first element.
+        resolved_path = next(ifilter(exists, (join(path, filename) for path in self.search_paths)))
+        self.yield_ref(start, start + len(filename), [self.include_menu(resolved_path)])
 
     def visit_typedef(self, item):
         start = start_pos(item.name, item.location)

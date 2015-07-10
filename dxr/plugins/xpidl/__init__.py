@@ -9,7 +9,6 @@ from dxr.plugins import Plugin, AdHocTreeToIndex, filters_from_namespace
 from dxr.plugins.xpidl import filters
 from dxr.plugins.xpidl.mappings import mappings
 from dxr.plugins.xpidl.visitor import IdlVisitor
-from idlparser.xpidl import IDLParser, IDLError
 
 
 def split_on_colon_into_abspaths(value):
@@ -28,6 +27,3 @@ plugin = Plugin(
     config_schema={
         'header_bucket': AbsPath,
         Optional('include_folders', default=[]): ColonPathList})
-
-
-# TODO next: create a real python module out of idlparser/

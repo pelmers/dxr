@@ -1,7 +1,7 @@
 from os.path import join
 
 from dxr.plugins.xpidl.visitor import IdlVisitor
-from dxr.plugins.xpidl.idlparser.xpidl import IDLParser, IDLError
+from xpidl.xpidl import IDLParser, IDLError
 from dxr.indexers import iterable_per_line, with_start_and_end, split_into_lines
 import dxr.indexers
 
