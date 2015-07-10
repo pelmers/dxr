@@ -5,7 +5,6 @@ from os.path import relpath, join, basename, dirname
 
 from dxr.indexers import Ref, Extent, Position
 from dxr.plugins.xpidl.idlparser.xpidl import Attribute
-
 from dxr.utils import search_url
 
 #  _____
@@ -30,14 +29,15 @@ def start_pos(name, location):
     return location._line.rfind(name) - location._colno + location._lexpos
 
 
-def make_extent(name, location):
-    """Return an Extent for the given name in this Location."""
+def make_extent(name, location, offset=0):
+    """Return an Extent for the given name in this Location, offset describes the line number
+    offset. (TODO: figure out why.)"""
 
     location.resolve()
     start_col = location._line.rfind(name) - location._colno
     # the AST's line numbers are 0-based, but DXR expects 1-based lines.
-    return Extent(Position(location._lineno + 1, start_col),
-                  Position(location._lineno + 1, start_col + len(name)))
+    return Extent(Position(location._lineno + offset, start_col),
+                  Position(location._lineno + offset, start_col + len(name)))
 
 
 def header_line_numbers(idl, filename):
@@ -129,8 +129,8 @@ class IdlVisitor(object):
     def yield_needle(self, name, mapping, extent):
         self.needles.append((PLUGIN_NAME + '_' + name, mapping, extent))
 
-    def yield_name_needle(self, filter_name, name, location):
-        self.yield_needle(filter_name, {'name': name}, make_extent(name, location))
+    def yield_name_needle(self, filter_name, name, location, offset=0):
+        self.yield_needle(filter_name, {'name': name}, make_extent(name, location, offset))
 
     def yield_ref(self, start, end, menus):
         self.refs.append((start, end, Ref(menus)))
@@ -141,7 +141,7 @@ class IdlVisitor(object):
             'html': 'See generated source',
             'title': 'Go to this line in the generated C++ header file',
             'href': self.generated_url + '#%d' % self.line_map[production],
-            'icon': 'class'
+            'icon': 'jump'
         }
 
     def filtered_search_menu(self, filter_name, name, html='Find declaration',
@@ -183,19 +183,22 @@ class IdlVisitor(object):
             self.subclass_search_menu(interface.name),
             self.generated_menu(interface)
         ])
-        self.yield_name_needle('type_decl', interface.name, interface.location)
+        self.yield_name_needle('type_decl', interface.name, interface.location, 1)
 
         for member in interface.members:
             if member.kind == 'const':
                 start = start_pos(member.name, member.location)
                 self.yield_ref(start, start + len(member.name), [
-                    self.filtered_search_menu('var', member.name, icon='field')
+                    self.filtered_search_menu('var-decl', member.name, icon='field'),
+                    self.filtered_search_menu('var', member.name, html='Find definition',
+                                              title='Search for definitions', icon='field'),
                 ])
                 self.yield_name_needle('var_decl', member.name, member.location)
 
             elif member.kind == 'method':
                 start = member.location._lexpos
                 self.yield_ref(start, start + len(member.name), [
+                    self.filtered_search_menu('function-decl', member.name, icon='method'),
                     self.filtered_search_menu('function', member.name, 'Find implementations',
                                               'Search for implementations of this method',
                                               'method')

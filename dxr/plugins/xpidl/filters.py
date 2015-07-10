@@ -25,3 +25,4 @@ class VarFilter(_XpidlFilter):
 class DerivedFilter(_XpidlFilter):
     name = 'derived'
     description = Markup('Derived interface: <code>derived:ParentInterface</code>')
+
