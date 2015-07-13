@@ -200,6 +200,7 @@ class IdlVisitor(object):
                 self.yield_name_needle('var_decl', member.name, member.location)
 
             elif member.kind == 'method':
+                member.location.resolve()
                 start = member.location._lexpos
                 self.yield_ref(start, start + len(member.name), [
                     self.filtered_search_menu('function-decl', member.name, icon='method'),
