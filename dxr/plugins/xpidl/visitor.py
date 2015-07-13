@@ -1,12 +1,14 @@
 from cStringIO import StringIO
+from itertools import ifilter
 
 from flask import url_for
-from itertools import ifilter
 from os.path import relpath, join, basename, dirname
 from os.path import exists
-from dxr.indexers import Ref, Extent, Position
 from xpidl.xpidl import Attribute
+
+from dxr.indexers import Ref, Extent, Position
 from dxr.utils import search_url
+
 
 #  _____
 # < lol >
@@ -36,7 +38,7 @@ def make_extent(name, location, offset=0):
 
     location.resolve()
     start_col = location._line.rfind(name) - location._colno
-    # the AST's line numbers are 0-based, but DXR expects 1-based lines.
+    # the AST's line numbers are sometimes 0-based, but DXR expects 1-based lines.
     return Extent(Position(location._lineno + offset, start_col),
                   Position(location._lineno + offset, start_col + len(name)))
 
@@ -205,7 +207,11 @@ class IdlVisitor(object):
                                               'Search for implementations of this method',
                                               'method')
                 ])
-                self.yield_name_needle('function_decl', member.name, member.location)
+                self.yield_needle('function_decl', {'name': member.name},
+                                  Extent(Position(member.location._lineno + 1,
+                                                  member.location._colno),
+                                         Position(member.location._lineno + 1,
+                                                  member.location._colno + len(member.name))))
 
     def visit_include(self, item):
         filename = item.filename
