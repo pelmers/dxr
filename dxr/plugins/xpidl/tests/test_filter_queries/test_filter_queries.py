@@ -1,9 +1,7 @@
-# Index a big idl file.
-
 from dxr.testing import DxrInstanceTestCase
 
-class IdlSmokeTest(DxrInstanceTestCase):
-    """Test indexing of an IDL file"""
+class IdlFilterQueryTest(DxrInstanceTestCase):
+    """Test query filters for Idl structure."""
 
     def test_nothing(self):
         """A null test just to make the setup method run"""
