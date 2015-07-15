@@ -1,14 +1,13 @@
 from functools import partial
-from dxr.plugins.xpidl.indexers import FileToIndex
-
 from os.path import abspath
+
 from schema import Optional, Use, And
 
 from dxr.config import AbsPath
 from dxr.plugins import Plugin, AdHocTreeToIndex, filters_from_namespace
 from dxr.plugins.xpidl import filters
 from dxr.plugins.xpidl.mappings import mappings
-from dxr.plugins.xpidl.visitor import IdlVisitor
+from dxr.plugins.xpidl.indexers import FileToIndex
 
 
 def split_on_colon_into_abspaths(value):

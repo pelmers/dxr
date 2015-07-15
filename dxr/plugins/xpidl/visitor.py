@@ -1,27 +1,15 @@
 from cStringIO import StringIO
 from itertools import ifilter
+from os.path import relpath, join, basename, dirname, exists
 
 from flask import url_for
-from os.path import relpath, join, basename, dirname
-from os.path import exists
+from xpidl.header import idl_basename, header, include, jsvalue_include, \
+    infallible_includes, header_end, forward_decl, write_interface, printComments
 from xpidl.xpidl import Attribute
 
 from dxr.indexers import Ref, Extent, Position
+from dxr.plugins.xpidl.filters import PLUGIN_NAME
 from dxr.utils import search_url
-
-
-#  _____
-# < lol >
-#  -----
-#         \   ^__^
-#          \  (oo)\_______
-#             (__)\       )\/\
-#                 ||----w |
-#                 ||     ||
-from xpidl.header import idl_basename, header, include, jsvalue_include, \
-    infallible_includes, header_end, forward_decl, write_interface, printComments
-
-PLUGIN_NAME = 'xpidl'
 
 
 def start_pos(name, location):
@@ -30,17 +18,6 @@ def start_pos(name, location):
 
     location.resolve()
     return location._line.rfind(name) - location._colno + location._lexpos
-
-
-def make_extent(name, location, offset=0):
-    """Return an Extent for the given name in this Location, offset describes the line number
-    offset. (TODO: figure out why.)"""
-
-    location.resolve()
-    start_col = location._line.rfind(name) - location._colno
-    # the AST's line numbers are sometimes 0-based, but DXR expects 1-based lines.
-    return Extent(Position(location._lineno + offset, start_col),
-                  Position(location._lineno + offset, start_col + len(name)))
 
 
 def header_line_numbers(idl, filename):
@@ -113,6 +90,7 @@ class IdlVisitor(object):
         self.search_paths = [dirname(abs_path)] + include_folders
         self.ast.resolve(self.search_paths, parser)
         self.line_map = header_line_numbers(self.ast, self.header_filename)
+        self.line_list = contents.splitlines()
         # List of (start, end, Ref) where start and end are byte offsets into the file.
         self.refs = []
         self.needles = []
@@ -127,14 +105,42 @@ class IdlVisitor(object):
                 self.visit_forward(item)
             elif item.kind == 'interface':
                 self.visit_interface(item)
-            # TODO: can we do something useful for these?
-            # Unhandled: {'builtin', 'cdata', 'native', 'attribute', 'forward', 'attribute'}
+                # TODO: can we do something useful for these?
+                # Unhandled: {'builtin', 'cdata', 'native', 'attribute', 'forward', 'attribute'}
+
+    def check_lineno(self, needle, line):
+        """Check whether needle string appears on line; if it doesn't then try the one above and
+        below.
+
+        Return the line number (0-offset) where the needle appears nearest input line,
+        None if needle not found nearby.
+
+        """
+        for lineno in [line, line - 1, line + 1]:
+            # Make sure we stay in bounds.
+            if 0 <= lineno < len(self.line_list):
+                if needle in self.line_list[lineno]:
+                    return lineno
+
+    def make_extent(self, name, location):
+        """Return an Extent for the given name in this Location, None if we cannot construct it."""
+
+        # Remark: sometimes the location's line number is off by one (in either
+        # direction), so we check the surroundings to make sure it's there.
+        location.resolve()
+        start_col = location._line.rfind(name)
+        lineno = self.check_lineno(name, location._lineno) + 1
+        if lineno:
+            return Extent(Position(lineno, start_col),
+                          Position(lineno, start_col + len(name)))
 
     def yield_needle(self, name, mapping, extent):
         self.needles.append((PLUGIN_NAME + '_' + name, mapping, extent))
 
-    def yield_name_needle(self, filter_name, name, location, offset=0):
-        self.yield_needle(filter_name, {'name': name}, make_extent(name, location, offset))
+    def yield_name_needle(self, filter_name, name, location):
+        extent = self.make_extent(name, location)
+        if extent:
+            self.yield_needle(filter_name, {'name': name}, extent)
 
     def yield_ref(self, start, end, menus):
         self.refs.append((start, end, Ref(menus)))
@@ -187,7 +193,7 @@ class IdlVisitor(object):
             self.subclass_search_menu(interface.name),
             self.generated_menu(interface)
         ])
-        self.yield_name_needle('type_decl', interface.name, interface.location, 1)
+        self.yield_name_needle('type_decl', interface.name, interface.location)
 
         for member in interface.members:
             if member.kind == 'const':
@@ -208,18 +214,19 @@ class IdlVisitor(object):
                                               'Search for implementations of this method',
                                               'method')
                 ])
-                self.yield_needle('function_decl', {'name': member.name},
-                                  Extent(Position(member.location._lineno + 1,
-                                                  member.location._colno),
-                                         Position(member.location._lineno + 1,
-                                                  member.location._colno + len(member.name))))
+                lineno = self.check_lineno(member.name, member.location._lineno) + 1
+                if lineno is not None:
+                    self.yield_needle('function_decl', {'name': member.name},
+                                      Extent(Position(lineno, member.location._colno),
+                                             Position(lineno,
+                                                      member.location._colno + len(member.name))))
 
     def visit_include(self, item):
         filename = item.filename
         start = start_pos(filename, item.location)
         # Remark: it would be nice if the Include class held on to this data after it does the
         # same work.
-        # We know that the parser resolved the include it in the same way, so we assume we can
+        # We know that the parser resolved the include in the same way, so we assume we can
         # too and take the first element.
         resolved_path = next(ifilter(exists, (join(path, filename) for path in self.search_paths)))
         self.yield_ref(start, start + len(filename), [self.include_menu(resolved_path)])

@@ -1,8 +1,13 @@
 from jinja2 import Markup
+
 from dxr.filters import NameFilterBase
+
+PLUGIN_NAME = 'xpidl'
+
 
 class _XpidlFilter(NameFilterBase):
     lang = 'xpidl'
+
 
 class TypeFilter(_XpidlFilter):
     name = 'type-decl'
@@ -25,4 +30,3 @@ class VarFilter(_XpidlFilter):
 class DerivedFilter(_XpidlFilter):
     name = 'derived'
     description = Markup('Derived interface: <code>derived:ParentInterface</code>')
-

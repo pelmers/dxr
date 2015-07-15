@@ -2,6 +2,7 @@
 
 from dxr.testing import DxrInstanceTestCase
 
+
 class IdlSmokeTest(DxrInstanceTestCase):
     """Test indexing of an IDL file"""
 

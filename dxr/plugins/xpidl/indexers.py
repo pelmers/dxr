@@ -1,11 +1,11 @@
 from os.path import join
 
-from dxr.plugins.xpidl.visitor import IdlVisitor
 from xpidl.xpidl import IDLParser, IDLError
-from dxr.indexers import iterable_per_line, with_start_and_end, split_into_lines
-import dxr.indexers
 
-PLUGIN_NAME = 'xpidl'
+import dxr.indexers
+from dxr.indexers import iterable_per_line, with_start_and_end, split_into_lines
+from dxr.plugins.xpidl.filters import PLUGIN_NAME
+from dxr.plugins.xpidl.visitor import IdlVisitor
 
 
 class FileToIndex(dxr.indexers.FileToIndex):
@@ -31,8 +31,7 @@ class FileToIndex(dxr.indexers.FileToIndex):
         return self._idl
 
     def is_interesting(self):
-        # TODO next next: consider adding a link from generated headers back to the idl
-        # TODO next next next: javascript support/????
+        # TODO: consider adding a link from generated headers back to the idl
         return self.path.endswith('.idl')
 
     def links(self):
