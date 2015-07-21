@@ -578,4 +578,15 @@ $(function() {
             doQuery(false, window.location.href);
         }
     });
+
+    // Pressing y clicks permalink, a la GitHub.
+    window.addEventListener('keypress', function(e) {
+        // Key code for 'y'
+        if (e.which === 121) {
+            var permalink = document.querySelector(".permalink");
+            if (permalink) {
+                permalink.click();
+            }
+        }
+    });
 });
