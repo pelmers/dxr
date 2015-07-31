@@ -279,6 +279,7 @@ def _browse_folder(tree, path, config):
              f['name'],
              decode_es_datetime(f['modified']) if 'modified' in f else None,
              f.get('size'),
+             f.get('description', [''])[0],
              url_for('.browse', tree=tree, path=f['path'][0]),
              f.get('is_binary', [False])[0])
             for f in files_and_folders])

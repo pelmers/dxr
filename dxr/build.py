@@ -602,6 +602,8 @@ def index_folders(tree, index, es):
                 'path': [rel_path],  # array for consistency with non-folder file docs
                 'folder': superfolder_path,
                 'name': folder_name,
+                # TODO next: try to add a description for folders?
+                # (https://mxr.mozilla.org/webtools-central/source/mxr/Local.pm#251)
                 'is_folder': True})
 
 

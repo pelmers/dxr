@@ -24,6 +24,7 @@ setup(
                                   'clang = dxr.plugins.clang:plugin',
                                   'python = dxr.plugins.python:plugin',
                                   'omniglot = dxr.plugins.omniglot',
+                                  'descriptor = dxr.plugins.descriptor',
                                   'rust = dxr.plugins.rust:plugin',
                                   'pygmentize = dxr.plugins.pygmentize'],
                   'console_scripts': ['dxr = dxr.cli:main']},

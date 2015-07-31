@@ -87,6 +87,7 @@ mappings = {
                 'type': 'boolean',
                 'index': 'no'
             },
+            'description': UNINDEXED_STRING,
 
             # Sidebar nav links:
             'links': {
