@@ -449,7 +449,7 @@ def highlight_path(path, extents):
     :arg extents: iterable of unsorted, possibly overlapping (start, end) offset tuples
 
     """
-    highlighted_content = highlight(path, extents)
+    highlighted_content = highlight(path, extents, -1)
     # Split on slash, except the slash in </b>.
     highlighted_fragments = []
     for possibly_fragment in highlighted_content.split('/'):
@@ -460,7 +460,7 @@ def highlight_path(path, extents):
     return highlighted_fragments
 
 
-def highlight(content, extents):
+def highlight(content, extents, truncation_range=20):
     """Return ``content`` with the union of all ``extents`` highlighted.
 
     Put ``<b>`` before the beginning of each highlight and ``</b>`` at the
@@ -475,16 +475,33 @@ def highlight(content, extents):
     """
     def chunks():
         chars_before = None
-        for start, end in fix_extents_overlap(sorted(extents)):
+        fixed_extents = list(fix_extents_overlap(sorted(extents)))
+        init = [(0, 0)]
+        intervals = [incoming[0] - current[1] for current, incoming in
+                     zip(init + fixed_extents, fixed_extents)]
+        if len(fixed_extents) > 0:
+            # Push onto the end the range from last highlight to end of line.
+            intervals.append(len(content) - fixed_extents[-1][1])
+        for interval, (start, end) in zip(intervals, fixed_extents):
             if start > end:
                 raise ValueError('Extent start was after its end.')
-            yield cgi.escape(content[chars_before:start])
+            if interval > truncation_range * 2 >= 0:
+                # end of previous region ... start of current region
+                if chars_before:
+                    yield cgi.escape(content[chars_before:chars_before+truncation_range])
+                yield ' ... '
+                yield cgi.escape(content[start-truncation_range:start])
+            else:
+                yield cgi.escape(content[chars_before:start])
             yield u'<b>'
             yield cgi.escape(content[start:end])
             yield u'</b>'
             chars_before = end
-        # Make sure to get the rest of the line after the last highlight:
-        yield cgi.escape(content[chars_before:])
+        # Make sure to consider the rest of the line after the last highlight:
+        if len(fixed_extents) > 0 and len(content) - fixed_extents[-1][1] > truncation_range >= 0:
+            yield cgi.escape(content[chars_before:chars_before+truncation_range])
+        else:
+            yield cgi.escape(content[chars_before:])
     return ''.join(chunks()).lstrip()
 
 
