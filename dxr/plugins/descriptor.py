@@ -6,6 +6,7 @@ from os.path import splitext, basename
 
 import dxr.indexers
 
+
 class FileToIndex(dxr.indexers.FileToIndex):
     """Do lots of work to yield a description needle."""
 
@@ -28,6 +29,8 @@ class FileToIndex(dxr.indexers.FileToIndex):
                 yield 'description', description
 
     def describe_html(self):
+        """Return the contents of the <title> tag."""
+
         title_re = re.compile(r'<title>([^<]*)</title>')
         match = re.search(title_re, self.contents)
         if match:
@@ -35,14 +38,18 @@ class FileToIndex(dxr.indexers.FileToIndex):
             return match.group(1)
 
     def generic_describe(self):
-        # TODO next: for things like readme?
+        """Look at the first 60 lines for a match for {{self.path|description}} [delimiter]
+        text, and return the first text we find."""
+
         filename = basename(self.path)
         root, ext = splitext(filename)
-        # Look at the first 60 lines for some text matching filename [delimiter] text
         delimiters = ':,-'
         lines = self.contents.splitlines()
-        re_string = r'({}|description)({})?\s*([{}])\s*(?P<description>[\w\s-]+)'.format(root, ext, delimiters)
-        description_re = re.compile(re_string, re.IGNORECASE)
+        # TODO next: better heuristics here
+        description_re = re.compile(
+            r'({}|description)({})?\s*([{}]\n?)\s*(?P<description>[\w\s-]+)'.format(root, ext,
+                                                                                    delimiters),
+            re.IGNORECASE)
         for line in lines[:60]:
             match = re.search(description_re, line)
             if match:
