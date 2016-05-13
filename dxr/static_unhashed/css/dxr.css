@@ -215,12 +215,14 @@ mark {
     cursor: pointer;
     display: inline-block;
 }
+.found_row {
+    background: rgba(100,100,100,0.1);
+}
 /* TODO: let .results td use old padding if no context lines for given path */
 .context_row {
     opacity: 0.75;
 }
 .context_row > td {
-    opacity: 0.75;
     padding: .1rem .5rem;
 }
 .file a:target {
