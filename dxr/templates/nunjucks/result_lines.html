@@ -1,6 +1,6 @@
 {% macro result_lines(result, www_root, tree) -%}
   {% for entry in result.lines %}
-    <tr>
+  <tr {%- if entry.is_context %} class="context_row" {% endif %}>
       <td class="left-column">
         <a href="{{ www_root }}/{{ tree }}/source/{{ result.path }}#{{ entry.line_number }}">
           {{ entry.line_number }}

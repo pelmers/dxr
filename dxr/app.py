@@ -136,6 +136,7 @@ def search(tree):
     offset = non_negative_int(req.get('offset'), 0)
     limit = min(non_negative_int(req.get('limit'), 100), 1000)
     is_case_sensitive = req.get('case') == 'true'
+    context = non_negative_int(req.get('ctx'), 0)
 
     # Make a Query:
     query = Query(partial(current_app.es.search,
@@ -146,10 +147,10 @@ def search(tree):
 
     # Fire off one of the two search routines:
     searcher = _search_json if _request_wants_json() else _search_html
-    return searcher(query, tree, query_text, is_case_sensitive, offset, limit, config)
+    return searcher(query, tree, query_text, is_case_sensitive, offset, limit, 1, config)
 
 
-def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, config):
+def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, context, config):
     """Try a "direct search" (for exact identifier matches, etc.). If we have a direct hit,
     then return {redirect: hit location}.If that doesn't work, fall back to a normal search
     and return the results as JSON."""
@@ -169,12 +170,44 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
                 params['case'] = 'true'
             return jsonify({'redirect': url_for('.browse', _anchor=line, **params)})
     try:
+        def find_context(lines, path):
+            # Get `context` amount of context for the query results of path:lines.
+            # Compute the context for each line then go de-dup by converting to a set.
+            ctx_set = {nb + i for nb, _ in lines for i in range(-context, context+1)}
+            # Remove all the lines that we found already.
+            ctx_set.difference_update({nb for nb, _ in lines})
+            ctx_found = []
+            for line_no in ctx_set:
+                possible_hit = current_app.es.search(
+                        {
+                            'filter': {
+                                'and': [
+                                    {'term': {'path': path}},
+                                    {'term': {'number': line_no}}
+                                    ]
+                                },
+                            '_source': {'include': ['content']}
+                        },
+                        size=1,
+                        doc_type=LINE,
+                        index=es_alias_or_not_found(tree))['hits']['hits']
+                if len(possible_hit) > 0:
+                    hit = possible_hit[0]['_source']['content'][0].strip()
+                    # Don't add context lines that is just whitespace.
+                    if len(hit) > 0:
+                        ctx_found.append({'line_number': line_no, 'line': hit, 'is_context': True})
+            return ctx_found
+
         count_and_results = query.results(offset, limit)
         # Convert to dicts for ease of manipulation in JS:
+        # Provide context on the lines based on provided param.
         results = [{'icon': icon,
                     'path': path,
-                    'lines': [{'line_number': nb, 'line': l} for nb, l in lines]}
+                    'lines': sorted([{'line_number': nb, 'line': l, 'is_context': False} for nb, l in lines]
+                                     + find_context(lines, path),
+                                    key=lambda x: x['line_number'])}
                    for icon, path, lines in count_and_results['results']]
+
     except BadTerm as exc:
         return jsonify({'error_html': exc.reason, 'error_level': 'warning'}), 400
 
@@ -187,7 +220,7 @@ def _search_json(query, tree, query_text, is_case_sensitive, offset, limit, conf
         'tree_tuples': _tree_tuples(query_text, is_case_sensitive)})
 
 
-def _search_html(query, tree, query_text, is_case_sensitive, offset, limit, config):
+def _search_html(query, tree, query_text, is_case_sensitive, offset, limit, context, config):
     """Return the rendered template for search.html.
 
     """
@@ -204,6 +237,7 @@ def _search_html(query, tree, query_text, is_case_sensitive, offset, limit, conf
             'search_url': url_for('.search',
                                   tree=tree,
                                   q=query_text,
+                                  ctx=context,
                                   redirect='false'),
             'top_of_tree': url_for('.browse', tree=tree),
             'tree': tree,

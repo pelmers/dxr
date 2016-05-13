@@ -209,11 +209,19 @@ mark {
     width: 6ex;
 }
 .results td {
-    padding: .1rem .5rem;
+    padding: .25rem .5rem;
 }
 .results a {
     cursor: pointer;
     display: inline-block;
+}
+/* TODO: let .results td use old padding if no context lines for given path */
+.context_row {
+    opacity: 0.75;
+}
+.context_row > td {
+    opacity: 0.75;
+    padding: .1rem .5rem;
 }
 .file a:target {
     background-color: gray;
