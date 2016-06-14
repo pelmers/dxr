@@ -109,9 +109,6 @@ class FileToIndex(dxr.indexers.FileToIndex):
 class FileToSkim(dxr.indexers.FileToSkim):
     """Emitter of CSS classes for syntax-highlit regions"""
 
-    def is_interesting(self):
-        return not self.file_properties
-
     def regions(self):
         lexer = _lexer_for_filename(basename(self.path))
         if lexer:

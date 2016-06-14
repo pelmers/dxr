@@ -81,6 +81,13 @@ class FileToIndex(dxr.indexers.FileToIndex):
         return (PLUGIN_NAME + '_' + filter_name, mapping,
                 Extent(Position(row=line, col=start), Position(row=line, col=end)))
 
+    def annotations_by_line(self):
+        """Display parser error messages, if they exist.
+        """
+        icon = "background-image: url('{0}/static/icons/warning.png');".format(
+            self.tree.config.www_root)  # TODO: DRY with plugins/clang/indexers.py
+        return []
+
     def needles_by_line(self):
         def all_needles():
             for line in self.lines:
