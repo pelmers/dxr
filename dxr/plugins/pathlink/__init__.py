@@ -1,5 +1,5 @@
 import cPickle
-from os.path import join, relpath, dirname, exists
+from os.path import join, relpath, dirname, exists, abspath
 import re
 
 import dxr.indexers
@@ -13,11 +13,13 @@ class TreeToIndex(dxr.indexers.TreeToIndex):
     def __init__(self, plugin_name, tree, vcs_cache):
         super(TreeToIndex, self).__init__(plugin_name, tree, vcs_cache)
         self.temp_folder = join(self.tree.temp_folder, 'plugins/pathlink')
+        self.all_paths = {}
 
     def post_build(self):
-        """Store the source directory tree in memory? or in a file to save memory space.
-        probably put them in a file.
+        """Store the regular expression that finds the relative paths for the
+        directory tree in files.
         """
+
         open_stack = {}
 
         def add_entry(path):
@@ -50,6 +52,9 @@ class TreeToIndex(dxr.indexers.TreeToIndex):
 
         # Close any still-open files at the end.
         self.finalize_paths(open_stack, open_stack.keys())
+        # Load every path as an absolute path into a frozenset.
+        with open(join(self.temp_path_for_source("."), "paths.txt")) as paths:
+            self.all_paths = frozenset('/' + line.strip() for line in paths)
 
     def temp_path_for_source(self, source_path):
         """Return the path under temp/plugins/pathlink that corresponds to
@@ -66,7 +71,8 @@ class TreeToIndex(dxr.indexers.TreeToIndex):
         for path in to_finalize:
             # Cursor back to the start before reading
             path_map[path].seek(0)
-            regex = re.compile('|'.join(re.escape(line.strip()) for line in path_map[path].readlines()))
+            regex = re.compile('|'.join(re.escape(line.strip().rstrip('/'))
+                               for line in path_map[path]))
             temp = self.temp_path_for_source(path or '.')
             with open(join(temp, 're.pickle'), 'wb') as pickled:
                 cPickle.dump(regex, pickled)
@@ -74,12 +80,16 @@ class TreeToIndex(dxr.indexers.TreeToIndex):
             del path_map[path]
 
     def file_to_index(self, path, contents):
-        return FileToIndex(path, contents, self.plugin_name, self.tree)
+        return FileToIndex(path, contents, self.plugin_name, self.tree, self.all_paths)
 
 
 class FileToIndex(dxr.indexers.FileToIndex):
-    def __init__(self, path, contents, plugin_name, tree):
+    # Regular expression that finds abspath-like things
+    abspath_re = re.compile(r"(/[\w:_.-]+)+")
+
+    def __init__(self, path, contents, plugin_name, tree, all_paths):
         super(FileToIndex, self).__init__(path, contents, plugin_name, tree)
+        self.all_paths = all_paths
         temp_folder = join(self.tree.temp_folder, 'plugins/pathlink')
         temp_path = join(temp_folder, relpath(self.absolute_path(), self.tree.source_folder))
         regex_path = join(dirname(temp_path), 're.pickle')
@@ -98,12 +108,19 @@ class FileToIndex(dxr.indexers.FileToIndex):
                    PathRef(self.tree, relpath(join(dirname(self.absolute_path()), path),
                                               self.tree.source_folder)))
 
+        # If we're not already at the root, also look for absolute paths.
+        if dirname(self.absolute_path()) != abspath(self.tree.source_folder):
+            for m in self.abspath_re.finditer(self.contents):
+                path = m.group()
+                if path in self.all_paths:
+                    print "found", path, "in", self.path
+                    yield (m.start(), m.end(), PathRef(self.tree, path.lstrip('/')))
+
 
 class PathRef(Ref):
     plugin = 'pathlink'
 
     def menu_items(self):
-        print self.menu_data
         yield {'html': 'Visit file %s' % self.menu_data,
                'title': 'Go to %s' % self.menu_data,
                'href': browse_file_url(self.tree.name, self.menu_data),
