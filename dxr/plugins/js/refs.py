@@ -20,7 +20,9 @@ class QualifiedRef(_JsRef):
             yield {
                 'html': text,
                 'title': title,
-                'href': search_url(self.tree.name, '+%s:"%s"' % (filtername, qualname)),
+                'href': '%s&%s' % (search_url(self.tree.name,
+                                              '+%s:"%s"' % (filtername, qualname)),
+                                   'redirect=true'),
                 'icon': icon
             }
 
