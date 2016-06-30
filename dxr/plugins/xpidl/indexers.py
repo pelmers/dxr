@@ -2,7 +2,7 @@ from os.path import join
 from xpidl.xpidl import IDLParser, IDLError
 
 import dxr.indexers
-from dxr.indexers import iterable_per_line, with_start_and_end, split_into_lines
+from dxr.indexers import iterable_per_line, with_starts_and_ends, split_into_lines
 from dxr.utils import split_content_lines
 from dxr.plugins.xpidl.filters import PLUGIN_NAME
 from dxr.plugins.xpidl.visitor import IdlVisitor
@@ -47,4 +47,4 @@ class FileToIndex(dxr.indexers.FileToIndex):
 
     def needles_by_line(self):
         return iterable_per_line(
-            with_start_and_end(split_into_lines(self.idl.needles if self.idl else [])))
+            with_starts_and_ends(split_into_lines(self.idl.needles if self.idl else [])))

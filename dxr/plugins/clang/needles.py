@@ -1,6 +1,6 @@
 from itertools import chain
 
-from dxr.indexers import (iterable_per_line, with_start_and_end,
+from dxr.indexers import (iterable_per_line, with_starts_and_ends,
                           split_into_lines)
 
 
@@ -260,7 +260,7 @@ def inheritance_needles(condensed, parents, children):
 
 
 def all_needles(condensed, overrides, overriddens, parents, children):
-    return iterable_per_line(with_start_and_end(split_into_lines(chain(
+    return iterable_per_line(with_starts_and_ends(split_into_lines(chain(
             needles(condensed, 'function', include_typeless_qualname=True),
             ref_needles(condensed, 'function', include_typeless_qualname=True),
 

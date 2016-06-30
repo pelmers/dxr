@@ -5,8 +5,7 @@ from os.path import basename, dirname, relpath, join, exists
 
 from dxr.plugins.js.refs import PLUGIN_NAME, QualifiedRef
 import dxr.indexers
-from dxr.indexers import (Extent, Position, iterable_per_line_sorted,
-                          with_start_and_end)
+from dxr.indexers import Extent, Position, iterable_per_line, with_start_and_end
 
 
 AnalysisSchema = namedtuple('AnalysisSchema', ['loc', 'kind', 'type', 'name', 'sym'])
@@ -72,14 +71,16 @@ class FileToIndex(dxr.indexers.FileToIndex):
         """
         return self.char_offset(row, start), self.char_offset(row, end), ref
 
-    def build_needle(self, filter_name, line, start, end, name, qualname=None):
-        """Create a needle mapping for the given filter, line, start and end
+    def build_needles(self, filter_name, line, start, end, name, qualname=None):
+        """Yield needle mappings for the given filter, line, start and end
         columns, and name.
         """
         # If qualname is not provided, then use name.
         mapping = {'name': name, 'qualname': qualname or name}
-        return (PLUGIN_NAME + '_' + filter_name, mapping,
-                Extent(Position(row=line, col=start), Position(row=line, col=end)))
+        extent = Extent(Position(row=line, col=start), Position(row=line, col=end))
+        yield with_start_and_end((PLUGIN_NAME + '_' + filter_name, mapping, extent))
+        yield ('_'.join((PLUGIN_NAME, filter_name, 'suggest')), {'input': name, 'payload': {'label': u'{}#{}'.format(basename(self.path), line)}}, extent)
+
 
     def needles_by_line(self):
         def all_needles():
@@ -88,9 +89,10 @@ class FileToIndex(dxr.indexers.FileToIndex):
                 typ = line.type
                 if line.kind == 'use':
                     typ += '_ref'
-                yield self.build_needle(typ, row, start, end, line.name, line.sym)
+                for needle in self.build_needles(typ, row, start, end, line.name, line.sym):
+                    yield needle
 
-        return iterable_per_line_sorted(with_start_and_end(all_needles()))
+        return iterable_per_line(all_needles())
 
     def refs(self):
         for line in self.lines:

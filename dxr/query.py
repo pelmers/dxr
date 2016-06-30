@@ -82,6 +82,36 @@ class Query(object):
                                  h(file) for h in path_highlighters)),
                    [])
 
+    def suggest(self):
+        """Use suggest filters to provide some suggestions, [{name, path, number}].
+        """
+        if len(self.terms) != 1:
+            # We cannot filter suggestions with other filters.
+            return []
+        term = self.terms[0]
+        filters = [f(term, self.enabled_plugins)
+                   for f in filters_by_name(self.enabled_plugins)[term['name']]]
+        suggestions = {}
+        for f in filters:
+            try:
+                suggestions.update(f.suggest())
+            except NotImplementedError:
+                continue
+
+        results = self.es_search(suggestions)
+        # Join together all the results into a list.
+        all_results = []
+        for key in results:
+            if not key.startswith('_'):
+                for stack in results[key]:
+                    all_results.extend(stack['options'])
+        # Clean up by moving payload info up.
+        for result in all_results:
+            result.update(result['payload'])
+            del result['payload']
+        return all_results
+
+
     def results(self, offset=0, limit=100):
         """Return a count of search results and, as an iterable, the results
         themselves::

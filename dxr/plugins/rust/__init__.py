@@ -35,7 +35,7 @@ from itertools import chain
 from dxr import indexers
 from dxr.plugins import Plugin, filters_from_namespace, refs_from_namespace
 from dxr.filters import LINE
-from dxr.indexers import Extent, Position, iterable_per_line, with_start_and_end, split_into_lines, QUALIFIED_LINE_NEEDLE
+from dxr.indexers import Extent, Position, iterable_per_line, with_starts_and_ends, split_into_lines, QUALIFIED_LINE_NEEDLE
 
 from dxr.plugins.rust import filters
 from dxr.plugins.rust import refs
@@ -102,7 +102,7 @@ class FileToIndex(indexers.FileToIndex):
         return []
 
     def all_needles(self):
-        return iterable_per_line(with_start_and_end(split_into_lines(chain(
+        return iterable_per_line(with_starts_and_ends(split_into_lines(chain(
             self.file_needles('function', 'functions'),
             self.file_needles('function_ref', 'function_refs'),
             self.file_needles('var', 'variables'),

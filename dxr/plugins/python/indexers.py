@@ -11,7 +11,7 @@ from dxr.indexers import (Extent, FileToIndex as FileToIndexBase,
                           iterable_per_line, Position, split_into_lines,
                           TreeToIndex as TreeToIndexBase,
                           QUALIFIED_FILE_NEEDLE, QUALIFIED_LINE_NEEDLE,
-                          with_start_and_end)
+                          with_starts_and_ends)
 from dxr.plugins.python.analysis import TreeAnalysis
 from dxr.plugins.python.menus import ClassRef
 from dxr.plugins.python.utils import (ClassFunctionVisitorMixin,
@@ -211,7 +211,7 @@ class FileToIndex(FileToIndexBase):
 
     def needles_by_line(self):
         return iterable_per_line(
-            with_start_and_end(
+            with_starts_and_ends(
                 split_into_lines(
                     self.visitor.needles
                 )

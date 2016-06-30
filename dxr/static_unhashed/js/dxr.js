@@ -13,6 +13,7 @@ $(function() {
     dxr.baseUrl = location.protocol + '//' + location.host;
     dxr.searchUrl = constants.data('search');
     dxr.linesUrl = constants.data('lines');
+    dxr.autocompleteUrl = constants.data('autocomplete');
     dxr.tree = constants.data('tree');
 
     var timeouts = {};
@@ -212,6 +213,65 @@ $(function() {
         }
         return total;
     }
+
+    var queryBox = $("#query");
+    queryBox.autocomplete({
+        minLength: 3,
+        source: function(request, response) {
+            var terms = request.term.split();
+            var lastTerm = terms[terms.length - 1];
+            if (lastTerm.indexOf(":") !== -1) {
+                // TODO: also check there's no quote after the last :
+                // maybe only send if there's one colon in the query....
+                console.log("sending autocomplete query!", lastTerm);
+                // Then the term has a colon, send it to the backend.
+                var url = dxr.autocompleteUrl + '?' + $.param({q: lastTerm});
+                $.ajax({
+                    dataType: "json",
+                    url: url,
+                    success: function (data) {
+                        console.log(data);
+                        // Convert {text, number, path} to {value, label}
+                        var kept;
+                        var convertedData = [];
+                        var val = queryBox.val();
+                        var lastColon = val.lastIndexOf(":");
+                        if (lastColon > 0) {
+                            kept = val.slice(0, lastColon + 1);
+                        } else {
+                            kept = val;
+                        }
+                        console.log(kept);
+                        for (var i = 0; i < data.results.length; i++) {
+                            // Label shows in the suggestion menu, value
+                            // replaced on select. So we prepend the portion up
+                            // to the first colon to the returned value to keep
+                            // what's been typed so far.
+                            convertedData.push({
+                                value: kept + data.results[i].text,
+                                label: data.results[i].label
+                            });
+                        }
+                        console.log(convertedData);
+                        response(convertedData);
+                    }
+                });
+            }
+        },
+        select: function() {
+            // If I click or hit enter on an option, show its results now.
+            console.log("selected, querying to now...!kj,l");
+            queryNow(true);
+        }
+    });
+    // Override the autocomplete's default list item constructor.
+    queryBox.autocomplete("instance")._renderItem = function(ul, item) {
+        // Float the label on the right and the value on the left.
+        console.log("hahahah rendering", ul);
+        var labelSpan = $("<span>").css("float", "right").append(item.label);
+        var valSpan = $("<span>").append(item.value);
+        return $("<li>").append(valSpan).append(labelSpan).appendTo(ul);
+    };
 
     /**
      * Clears any existing query timer and sets a new one to query in a moment.

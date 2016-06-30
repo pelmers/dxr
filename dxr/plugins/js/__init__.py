@@ -4,7 +4,7 @@ esprima.
 
 from dxr.plugins import Plugin, filters_from_namespace, refs_from_namespace
 from dxr.filters import LINE
-from dxr.indexers import QUALIFIED_LINE_NEEDLE
+from dxr.indexers import QUALIFIED_LINE_NEEDLE, COMPLETION_MAPPING
 from dxr.plugins.js.indexers import TreeToIndex
 from dxr.plugins.js.refs import PLUGIN_NAME
 from dxr.plugins.js import refs, filters
@@ -16,7 +16,12 @@ mappings = {
             PLUGIN_NAME + '_prop': QUALIFIED_LINE_NEEDLE,
             PLUGIN_NAME + '_var': QUALIFIED_LINE_NEEDLE,
             PLUGIN_NAME + '_prop_ref': QUALIFIED_LINE_NEEDLE,
-            PLUGIN_NAME + '_var_ref': QUALIFIED_LINE_NEEDLE
+            PLUGIN_NAME + '_var_ref': QUALIFIED_LINE_NEEDLE,
+
+            PLUGIN_NAME + '_prop_suggest': COMPLETION_MAPPING,
+            PLUGIN_NAME + '_var_suggest': COMPLETION_MAPPING,
+            PLUGIN_NAME + '_prop_ref_suggest': COMPLETION_MAPPING,
+            PLUGIN_NAME + '_var_ref_suggest': COMPLETION_MAPPING,
         }
     }
 }

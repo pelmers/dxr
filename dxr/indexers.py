@@ -1,6 +1,7 @@
 """Base classes and convenience functions for writing indexers and skimmers"""
 
 from collections import namedtuple
+from itertools import imap
 from operator import itemgetter
 from os.path import join, islink
 from warnings import warn
@@ -9,6 +10,12 @@ from funcy import group_by, decorator, imapcat
 
 from dxr.utils import build_offset_map, split_content_lines
 
+# A suggestion mapping that specifies the completion suggester and enables
+# payloads.
+COMPLETION_MAPPING = {
+    'type': 'completion',
+    'payloads': True
+}
 
 STRING_PROPERTY = {
     'type': 'string',
@@ -538,15 +545,23 @@ def split_into_lines(triples):
     return imapcat(_split_one, triples)
 
 
-def with_start_and_end(triples):
+def with_start_and_end(triple):
+    """Add 'start' and 'end' column keys to the value mapping of a one-line
+    triple, and return the triple back.
+
+    """
+    key, mapping, extent = triple
+    mapping['start'] = extent.start.col
+    mapping['end'] = extent.end.col
+    return key, mapping, extent
+
+
+def with_starts_and_ends(triples):
     """Add 'start' and 'end' column keys to the value mappings of one-line
     triples, and yield them back.
 
     """
-    for key, mapping, extent in triples:
-        mapping['start'] = extent.start.col
-        mapping['end'] = extent.end.col
-        yield key, mapping, extent
+    return imap(with_start_and_end, triples)
 
 
 def iterable_per_line(triples):

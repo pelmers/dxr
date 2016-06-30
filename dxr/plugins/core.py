@@ -402,6 +402,16 @@ class FilterAggregator(Filter):
         # OR together all the underlying filters.
         return {'or': filter(None, (f.filter() for f in self.filters))}
 
+    def suggest(self):
+        # Combine all the underlying suggestors.
+        suggest = {}
+        for f in self.filters:
+            try:
+                suggest.update(f.suggest())
+            except NotImplementedError:
+                continue
+        return suggest
+
     def highlight_content(self, result):
         # Union all of our underlying filters.
         return chain.from_iterable(f.highlight_content(result) for f in self.filters)

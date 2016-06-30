@@ -87,6 +87,13 @@ class Filter(object):
         """
         raise NotImplementedError
 
+    def suggest(self):
+        """Return an ES suggest API query that we can use for autocomplete
+        queries which matches results by prefix. Optional, only called on
+        non-negated terms.
+        """
+        raise NotImplementedError
+
     def highlight_path(self, result):
         """Return an unsorted iterable of extents that should be highlighted in
         the ``path`` field of a search result.
@@ -177,6 +184,24 @@ class NameFilterBase(Filter):
                     }
                 }
             }
+
+    def suggest(self):
+        """If self.suggest_prop exists, construct a suggest query against it.
+
+        Otherwise, NotImplementedError.
+        """
+        try:
+            prop = self.suggest_prop
+        except AttributeError:
+            raise NotImplementedError
+        return {
+            '{}-{}-suggest'.format(self.lang, self.name): {
+                'text': self._term['arg'],
+                'completion': {
+                    'field': prop
+                }
+            }
+        }
 
     @negatable
     def filter(self):

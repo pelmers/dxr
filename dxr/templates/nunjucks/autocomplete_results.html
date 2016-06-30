@@ -1,0 +1,11 @@
+{% macro autocomplete_list(results) -%}
+  {% for result in results %}
+    <div style="position:relative;padding-bottom:5px;">
+        <div style="padding-left:1em">{{ result.name }}</div>
+        <div style="padding-left:1em;">{{ result.path }}:{{ result.number }}</div>
+    </div>
+  {% endfor %}
+{%- endmacro %}
+
+{# When not being included as a macro, render the code above. #}
+{{ autocomplete_list(results) }}

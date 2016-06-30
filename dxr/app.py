@@ -118,6 +118,20 @@ def index():
                             tree=current_app.dxr_config.default_tree))
 
 
+@dxr_blueprint.route('/<tree>/autocomplete')
+def autocomplete(tree):
+    frozen = frozen_config(tree)
+    req = request.values
+    query_term = req.get('q', '')
+    # TODO: add suggest() to pyelasticsearch
+    query = Query(lambda q: current_app.es.send_request('GET', [frozen['es_alias'], '_suggest'], q),
+                  query_term,
+                  plugins_named(frozen['enabled_plugins']))
+    results = query.suggest()
+    # print results
+    return jsonify({'results': results})
+
+
 @dxr_blueprint.route('/<tree>/search')
 def search(tree):
     """Normalize params, and dispatch between JSON- and HTML-returning
