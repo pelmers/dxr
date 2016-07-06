@@ -72,7 +72,7 @@ def needles(condensed,
                                       entity['span']))
             # Yield the needle for suggestions.
             yield ('c_{}{}_suggest'.format(name, suffix),
-                    {'input': mapping['name'], 'payload': {'label': mapping['qualname'] or ''}},
+                    {'input': mapping['name'], 'payload': {'label': mapping.get('qualname', '')}},
                    entity['span'])
 
 
