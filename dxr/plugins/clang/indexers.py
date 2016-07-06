@@ -10,7 +10,7 @@ from funcy import merge, imap, autocurry
 from dxr.filters import LINE
 from dxr.indexers import (FileToIndex as FileToIndexBase,
                           TreeToIndex as TreeToIndexBase,
-                          QUALIFIED_LINE_NEEDLE, unsparsify, FuncSig)
+                          COMPLETION_MAPPING, QUALIFIED_LINE_NEEDLE, unsparsify, FuncSig)
 from dxr.plugins.clang.condense import condense_file, condense_global
 from dxr.plugins.clang.menus import (FunctionRef, VariableRef, TypeRef,
     NamespaceRef, NamespaceAliasRef, MacroRef, IncludeRef, TypedefRef)
@@ -45,7 +45,24 @@ mappings = {
             # At a base method's site, record all the methods that override
             # it. Then we can search for any of those methods and turn up the
             # base one:
-            'c_overridden': QUALIFIED_LINE_NEEDLE
+            'c_overridden': QUALIFIED_LINE_NEEDLE,
+
+            # Suggestion needles
+            'c_function_suggest': COMPLETION_MAPPING,
+            'c_function_ref_suggest': COMPLETION_MAPPING,
+            'c_function_decl_suggest': COMPLETION_MAPPING,
+            'c_type_ref_suggest': COMPLETION_MAPPING,
+            'c_type_decl_suggest': COMPLETION_MAPPING,
+            'c_type_suggest': COMPLETION_MAPPING,
+            'c_var_suggest': COMPLETION_MAPPING,
+            'c_var_ref_suggest': COMPLETION_MAPPING,
+            'c_var_decl_suggest': COMPLETION_MAPPING,
+            'c_macro_ref_suggest': COMPLETION_MAPPING,
+            'c_namespace_suggest': COMPLETION_MAPPING,
+            'c_namespace_ref_suggest': COMPLETION_MAPPING,
+            'c_namespace_alias_suggest': COMPLETION_MAPPING,
+            'c_namespace_alias_ref_suggest': COMPLETION_MAPPING,
+            'c_call_suggest': COMPLETION_MAPPING
         }
     }
 }

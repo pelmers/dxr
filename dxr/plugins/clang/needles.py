@@ -1,7 +1,7 @@
 from itertools import chain
 
-from dxr.indexers import (iterable_per_line, with_starts_and_ends,
-                          split_into_lines)
+from dxr.indexers import (iterable_per_line, with_start_and_end,
+                          with_starts_and_ends, split_into_lines)
 
 
 # TODO: Use.
@@ -63,10 +63,17 @@ def needles(condensed,
                     value['qualname'] = [qualname, qualname[:offset]]
         return value
 
-    return (('c_{0}{1}'.format(name, suffix),
-             names(entity),
-             entity['span'])
-            for entity in condensed[kind] if matches_subkind(entity))
+    for entity in condensed[kind]:
+        if matches_subkind(entity):
+            mapping = names(entity)
+            # Yield the indexing needle.
+            yield with_start_and_end(('c_{0}{1}'.format(name, suffix),
+                                      mapping,
+                                      entity['span']))
+            # Yield the needle for suggestions.
+            yield ('c_{}{}_suggest'.format(name, suffix),
+                    {'input': mapping['name'], 'payload': {'label': mapping['qualname'] or ''}},
+                   entity['span'])
 
 
 def ref_needles(condensed,
@@ -240,7 +247,7 @@ def caller_needles(condensed, overriddens):
         if call['calltype'] == 'virtual':
             for needle_from_base_method in needles_from_graph(
                     overriddens, call['qualname'], call['span'], 'c_call'):
-                yield needle_from_base_method
+                yield with_start_and_end(needle_from_base_method)
 
 
 def inheritance_needles(condensed, parents, children):
@@ -260,7 +267,7 @@ def inheritance_needles(condensed, parents, children):
 
 
 def all_needles(condensed, overrides, overriddens, parents, children):
-    return iterable_per_line(with_starts_and_ends(split_into_lines(chain(
+    return iterable_per_line(split_into_lines(chain(
             needles(condensed, 'function', include_typeless_qualname=True),
             ref_needles(condensed, 'function', include_typeless_qualname=True),
 
@@ -281,22 +288,22 @@ def all_needles(condensed, overrides, overriddens, parents, children):
             needles(condensed, 'namespace_alias'),
             ref_needles(condensed, 'namespace_alias'),
 
-            macro_needles(condensed),
+            with_starts_and_ends(macro_needles(condensed)),
             ref_needles(condensed, 'macro', include_qualname=False),
 
             decl_needles(condensed, 'var', subkind='variable'),
             decl_needles(condensed, 'function', include_typeless_qualname=True),
             decl_needles(condensed, 'type'),
 
-            warning_needles(condensed),
-            warning_opt_needles(condensed),
+            with_starts_and_ends(warning_needles(condensed)),
+            with_starts_and_ends(warning_opt_needles(condensed)),
 
             caller_needles(condensed, overriddens),
 
-            overrides_needles(condensed, overrides),
-            overridden_needles(condensed, overriddens),
+            with_starts_and_ends(overrides_needles(condensed, overrides)),
+            with_starts_and_ends(overridden_needles(condensed, overriddens)),
 
-            member_needles(condensed),
+            with_starts_and_ends(member_needles(condensed)),
 
-            inheritance_needles(condensed, parents, children),
-    ))))
+            with_starts_and_ends(inheritance_needles(condensed, parents, children)),
+    )))

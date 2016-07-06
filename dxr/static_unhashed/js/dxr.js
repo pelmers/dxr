@@ -258,7 +258,8 @@ $(function() {
         select: function() {
             // If I click or hit enter on an option, show its results now.
             console.log("selected, querying to now...!kj,l");
-            queryNow(true);
+            // For some reason, calling queryNow directly doesn't work?
+            setTimeout(function() {queryNow(true)}, 0);
         }
     });
     // Override the autocomplete's default list item constructor.
