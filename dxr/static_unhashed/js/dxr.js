@@ -218,14 +218,11 @@ $(function() {
     queryBox.autocomplete({
         minLength: 3,
         source: function(request, response) {
-            var terms = request.term.split();
-            var lastTerm = terms[terms.length - 1];
-            if (lastTerm.indexOf(":") !== -1) {
-                // TODO: also check there's no quote after the last :
-                // maybe only send if there's one colon in the query....
-                console.log("sending autocomplete query!", lastTerm);
-                // Then the term has a colon, send it to the backend.
-                var url = dxr.autocompleteUrl + '?' + $.param({q: lastTerm});
+            // Ask for autocompletion only if the field has exactly one colon.
+            var firstColon = request.term.indexOf(":");
+            if (firstColon !== -1 && request.term.lastIndexOf(":") === firstColon) {
+                console.log("sending autocomplete query!", request.term);
+                var url = dxr.autocompleteUrl + '?' + $.param({q: request.term});
                 $.ajax({
                     dataType: "json",
                     url: url,
