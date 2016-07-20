@@ -1,0 +1,8 @@
+Currently the plugin does not link relative paths to folders, such as green.
+
+However if it's an absolute path then it should link.
+/sub/green
+
+Here's a relative path.
+
+green/blue

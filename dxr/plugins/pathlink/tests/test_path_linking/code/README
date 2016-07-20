@@ -1,0 +1,9 @@
+Different paths, relative and absolute, embedded in text or on their own lines,
+for folders and files.
+
+Paths in the source_folder are linked as relative paths, meaning any leading /
+will not be clicky.
+
+sub/green/blue
+/sub/red
+/sub/green/blue
