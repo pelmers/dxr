@@ -62,7 +62,7 @@ class RegexpTests(SingleFileTestCase):
     """
     source = """// Which of us is the beaver?
         // The paddle-shaped tail is a dead giveaway.
-        // We know it's you, Shahad.
+        // We know it's you, Shapad.
         """
 
     def test_case_sensitive(self):
@@ -73,7 +73,13 @@ class RegexpTests(SingleFileTestCase):
         self.found_lines_eq(
             'regexp:sha[a-z]+d',
             [('// The paddle-<b>shaped</b> tail is a dead giveaway.', 2),
-             ("// We know it's you, <b>Shahad</b>.", 3)])
+             ("// We know it's you, <b>Shapad</b>.", 3)])
+
+    def test_repeat_range(self):
+        self.found_lines_eq(
+            'regexp:pad{1,2}',
+            [('// The <b>padd</b>le-shaped tail is a dead giveaway.', 2),
+             ("// We know it's you, Sha<b>pad</b>.", 3)])
 
 
 

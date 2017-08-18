@@ -343,7 +343,10 @@ class SubstringTreeVisitor(NodeVisitor):
         """Return a tuple of (min, max), where '' means infinity."""
         # It'll either be in the hash, or it will have already been broken
         # down into a tuple by visit_repeat_range.
-        return self.quantifier_expansions.get(quantifier.text, quantifier)
+        if isinstance(quantifier, tuple):
+            return quantifier
+        else:
+            return self.quantifier_expansions.get(quantifier.text, quantifier)
 
     def visit_repeat(self, repeat, (brace, repeat_range, end_brace)):
         return repeat_range
@@ -358,7 +361,7 @@ class SubstringTreeVisitor(NodeVisitor):
         return int(min), (max if max == '' else int(max))
 
     def visit_number(self, number, children):
-        return int(number)
+        return int(number.text)
 
     def visit_group(self, group, (paren, regexp, end_paren)):
         return regexp
